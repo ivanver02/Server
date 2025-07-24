@@ -1,0 +1,2 @@
+# Mantener estructura para checkpoints de modelos MMPose
+# Los archivos .pth son demasiado grandes para git (>100MB)

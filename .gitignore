@@ -74,3 +74,66 @@ htmlcov/
 
 # Documentation
 docs/_build/
+
+# =====================================
+# ESPECÍFICO DEL PROYECTO DE MARCHA
+# =====================================
+
+# Datos sensibles de pacientes (HIPAA/GDPR)
+data/unprocessed/
+data/processed/
+logs/patient_*.log
+backup/patient_*
+
+# Videos y medios temporales
+temp_videos/
+photos_from_video/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tiff
+
+# Modelos MMPose grandes (archivos .pth)
+mmpose_models/checkpoints/*.pth
+mmpose_models/checkpoints/*.ckpt
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.onnx
+
+# Cache de MMPose/Computer Vision
+.mmpose_cache/
+mmpose_cache/
+work_dirs/
+.mmdet_cache/
+.cuda_cache/
+
+# Calibración específica del setup
+config/camera_intrinsics_local.py
+calibration_data/
+
+# Resultados de análisis
+results/
+reports/
+analysis_output/
+benchmark_results/
+performance_logs/
+
+# Archivos grandes comprimidos
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Mantener estructura pero ignorar contenido
+data/unprocessed/.gitkeep
+data/processed/.gitkeep
+mmpose_models/configs/.gitkeep
+mmpose_models/checkpoints/.gitkeep
+!.gitkeep
