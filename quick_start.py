@@ -40,11 +40,20 @@ def main():
     parser.add_argument('--verify-only', action='store_true', help='Solo verificar sistema')
     parser.add_argument('--force-download', action='store_true', help='Forzar descarga de modelos')
     parser.add_argument('--skip-verification', action='store_true', help='Saltar verificación inicial')
+    parser.add_argument('--test', action='store_true', help='Ejecutar tests del sistema')
+    parser.add_argument('--test-quick', action='store_true', help='Ejecutar solo tests rápidos')
     
     args = parser.parse_args()
     
     print("🦴 Inicio Rápido - Sistema de Análisis de Marcha")
     print("=" * 60)
+    
+    # Opción de testing
+    if args.test or args.test_quick:
+        test_command = ['--quick'] if args.test_quick else []
+        success, output = run_command(['-m', 'backend.tests.run_all_tests'] + test_command, 
+                                    'Ejecución de tests del sistema')
+        return 0 if success else 1
     
     # Paso 1: Verificación del sistema (a menos que se salte)
     if not args.skip_verification:
@@ -71,7 +80,12 @@ def main():
     has_models = False
     if models_path.exists():
         pth_files = list(models_path.glob('*.pth'))
-        has_models = len(pth_files) >= 4  # Al menos 4 modelos
+        has_models = len(pth_files) >= 4  # Al menos 4 modelos requeridos
+        
+        if has_models:
+            print(f"\n✅ Encontrados {len(pth_files)} modelos MMPose")
+        else:
+            print(f"\n📋 Solo {len(pth_files)}/4 modelos encontrados")
     
     if args.force_download or not has_models:
         print(f"\n📥 {'Forzando descarga' if args.force_download else 'Modelos no encontrados, descargando'}...")
