@@ -122,9 +122,9 @@ class MMPoseConfig:
                     'keypoints': 17,
                     'gpu': 'cuda:0'
                 },
-                'hrnet_w32_coco': {
-                    'config': 'configs/pose2d/td-hm_hrnet-w32_udp-8xb32-210e_coco-256x192.py',
-                    'checkpoint': 'checkpoints/td-hm_hrnet-w32_udp-8xb32-210e_coco-256x192.pth',
+                'vitpose_huge_coco': {
+                    'config': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192.py',
+                    'checkpoint': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192-e32adcd4_20230314.pth',
                     'keypoints': 17,
                     'gpu': 'cuda:0'
                 },

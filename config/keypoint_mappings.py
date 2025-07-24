@@ -68,7 +68,7 @@ COCO_WHOLEBODY_KEYPOINTS = [
 # Mapeo de modelos a sus keypoints
 MODEL_KEYPOINT_MAPPINGS: Dict[str, List[str]] = {
     'hrnet_w48_coco': COCO_17_KEYPOINTS,
-    'hrnet_w32_coco': COCO_17_KEYPOINTS, 
+    'vitpose_huge_coco': COCO_17_KEYPOINTS,
     'resnet50_rle_coco': COCO_17_KEYPOINTS,
     'wholebody_coco': COCO_WHOLEBODY_KEYPOINTS
 }

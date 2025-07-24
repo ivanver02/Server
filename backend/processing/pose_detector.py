@@ -1,9 +1,10 @@
 """
-Wrapper para modelos MMPose
-Maneja la inicialización y uso de múltiples modelos de detección de pose
+Wrapper simplificado para modelos MMPose
+Usa la API simple de MMPoseInferencer con rutas directas
 """
 import torch
 import numpy as np
+import cv2
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import logging
@@ -11,10 +12,18 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# Lista de nombres de keypoints COCO
+JOINT_NAMES = [
+    "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist", "left_hip", "right_hip",
+    "left_knee", "right_knee", "left_ankle", "right_ankle"
+]
+
 class MMPoseInferencerWrapper:
     """
-    Wrapper para manejar múltiples instancias de MMPoseInferencer
-    Optimizado para procesamiento en múltiples GPUs
+    Wrapper simplificado para manejar múltiples instancias de MMPoseInferencer
+    Usa rutas directas a configs y checkpoints
     """
     
     def __init__(self):
@@ -22,6 +31,8 @@ class MMPoseInferencerWrapper:
         self.device_assignments: Dict[str, str] = {}
         self.model_configs: Dict[str, Dict[str, str]] = {}
         self.initialized = False
+        self.models_dir = Path(__file__).parent.parent.parent / "mmpose_models"
+    
     
     def initialize_models(self) -> bool:
         """
@@ -32,28 +43,36 @@ class MMPoseInferencerWrapper:
         """
         try:
             from mmpose.apis import MMPoseInferencer
-            from config import mmpose_config, processing_config
             
             logger.info("🤖 Inicializando modelos MMPose...")
             
-            # Verificar disponibilidad de GPU
-            if not torch.cuda.is_available():
-                logger.warning("⚠️ CUDA no disponible, usando CPU")
-                device_primary = 'cpu'
-                device_secondary = 'cpu'
-            else:
-                device_primary = processing_config.primary_gpu
-                device_secondary = processing_config.secondary_gpu
-                logger.info(f"🎮 GPUs disponibles: {device_primary}, {device_secondary}")
+            # Definir configuraciones de modelos con rutas directas
+            self.model_configs = {
+                'hrnet_w48': {
+                    'config': 'td-hm_hrnet-w48_8xb32-210e_coco-256x192.py',
+                    'checkpoint': 'td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth',
+                    'keypoints': 17,
+                    'gpu': 'cpu'
+                },
+                'vitpose_huge': {
+                    'config': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192.py',
+                    'checkpoint': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192-e32adcd4_20230314.pth',
+                    'keypoints': 17,
+                    'gpu': 'cpu'
+                }
+            }
             
-            self.model_configs = mmpose_config.model_configs
+            # Verificar disponibilidad de GPU
+            device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+            logger.info(f"🎮 Dispositivo: {device}")
+            
             success_count = 0
             
             # Inicializar cada modelo
             for model_name, config in self.model_configs.items():
                 try:
-                    config_path = mmpose_config.models_dir / config['config']
-                    checkpoint_path = mmpose_config.models_dir / config['checkpoint']
+                    config_path = self.models_dir / config['config']
+                    checkpoint_path = self.models_dir / config['checkpoint']
                     
                     # Verificar archivos existen
                     if not config_path.exists():
@@ -64,14 +83,9 @@ class MMPoseInferencerWrapper:
                         logger.error(f"❌ Checkpoint no encontrado: {checkpoint_path}")
                         continue
                     
-                    # Asignar dispositivo según configuración
-                    device = config.get('gpu', device_primary)
-                    if device not in ['cpu', device_primary, device_secondary]:
-                        device = device_primary
+                    logger.info(f"🔧 Inicializando {model_name}...")
                     
-                    logger.info(f"🔧 Inicializando {model_name} en {device}...")
-                    
-                    # Crear inferencer
+                    # Crear inferencer con rutas directas
                     inferencer = MMPoseInferencer(
                         pose2d=str(config_path),
                         pose2d_weights=str(checkpoint_path),
@@ -82,7 +96,7 @@ class MMPoseInferencerWrapper:
                     self.device_assignments[model_name] = device
                     success_count += 1
                     
-                    logger.info(f"✅ {model_name} inicializado correctamente en {device}")
+                    logger.info(f"✅ {model_name} inicializado correctamente")
                     
                 except Exception as e:
                     logger.error(f"❌ Error inicializando {model_name}: {e}")
@@ -156,9 +170,16 @@ class MMPoseInferencerWrapper:
             inferencer = self.inferencers[model_name]
             start_time = time.time()
             
-            # Realizar inferencia
-            results = inferencer(image_path)
+            # Realizar inferencia usando la API simple
+            result_generator = inferencer(
+                image_path,
+                return_vis=True,
+                vis_out_dir=None,
+                pred_out_dir=None,
+                show=False
+            )
             
+            results = next(result_generator)
             processing_time = time.time() - start_time
             
             # Procesar resultados
@@ -220,6 +241,66 @@ class MMPoseInferencerWrapper:
         
         return results
     
+    def process_video(self, model_name: str, video_path: str, output_dir: str = None) -> List[Dict[str, Any]]:
+        """
+        Procesar un video completo frame por frame
+        
+        Args:
+            model_name: Nombre del modelo a usar
+            video_path: Ruta al video
+            output_dir: Directorio de salida (opcional)
+            
+        Returns:
+            Lista de resultados por frame
+        """
+        if not self.is_model_available(model_name):
+            logger.error(f"Modelo no disponible: {model_name}")
+            return []
+        
+        try:
+            video_path = Path(video_path)
+            if not video_path.exists():
+                logger.error(f"Video no encontrado: {video_path}")
+                return []
+            
+            logger.info(f"🎬 Procesando video: {video_path.name} con {model_name}")
+            
+            # Usar la API simple de MMPose para procesar video
+            inferencer = self.inferencers[model_name]
+            start_time = time.time()
+            
+            result_generator = inferencer(
+                str(video_path),
+                return_vis=True,
+                vis_out_dir=output_dir,
+                pred_out_dir=output_dir,
+                show=False
+            )
+            
+            results = []
+            frame_count = 0
+            
+            for result in result_generator:
+                frame_count += 1
+                if result and 'predictions' in result:
+                    results.append({
+                        'frame': frame_count,
+                        'predictions': result['predictions'],
+                        'model_name': model_name
+                    })
+                
+                if frame_count % 30 == 0:  # Log cada 30 frames
+                    logger.info(f"Procesados {frame_count} frames...")
+            
+            processing_time = time.time() - start_time
+            logger.info(f"✅ Video procesado: {frame_count} frames en {processing_time:.2f}s")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error procesando video {video_path}: {e}")
+            return []
+    
     def get_model_keypoint_count(self, model_name: str) -> int:
         """Obtener número de keypoints de un modelo"""
         if model_name in self.model_configs:
@@ -256,8 +337,7 @@ class MMPoseInferencerWrapper:
             'available_models': self.get_available_models(),
             'device_assignments': self.device_assignments.copy(),
             'cuda_available': torch.cuda.is_available(),
-            'gpu_memory_allocated': torch.cuda.memory_allocated() if torch.cuda.is_available() else 0,
-            'gpu_memory_cached': torch.cuda.memory_reserved() if torch.cuda.is_available() else 0
+            'models_dir': str(self.models_dir)
         }
 
 # Instancia global del wrapper
