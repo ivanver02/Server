@@ -44,23 +44,7 @@ class ProcessingCoordinator:
             True si se inicializó correctamente
         """
         try:
-            logger.info("🚀 Inicializando ProcessingCoordinator...")
-            
-            # 1. Cargar configuración
-            from config import processing_config
-            
-            # Registrar modelos específicos
-            all_models = []
-            if hasattr(processing_config, 'coco_models'):
-                all_models.extend(processing_config.coco_models)
-            if hasattr(processing_config, 'extended_models'):
-                all_models.extend(processing_config.extended_models)
-            
-            # Si no hay modelos configurados, usar los por defecto
-            if not all_models and hasattr(processing_config, 'default_models'):
-                all_models = processing_config.default_models
-                
-            logger.info(f"Modelos configurados: {all_models}")
+            logger.info("Inicializando ProcessingCoordinator...")
             
             # Inicializar detectores
             if not self.detector_manager.initialize_all():
@@ -74,12 +58,12 @@ class ProcessingCoordinator:
             
             self.is_initialized = True
             active_detectors = self.detector_manager.get_active_detectors()
-            logger.info(f"✅ ProcessingCoordinator inicializado con {len(active_detectors)} detectores activos")
+            logger.info(f"ProcessingCoordinator inicializado con {len(active_detectors)} detectores activos")
             
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error inicializando ProcessingCoordinator: {e}")
+            logger.error(f"Error inicializando ProcessingCoordinator: {e}")
             return False
     
     def process_chunk_videos(self, 
@@ -162,7 +146,7 @@ class ProcessingCoordinator:
             total_time = time.time() - start_time
             result.processing_time = total_time
             
-            logger.info(f"✅ Chunk {chunk_number} procesado en {total_time:.2f}s")
+            logger.info(f"Chunk {chunk_number} procesado en {total_time:.2f}s")
             return result
             
         except Exception as e:
@@ -337,10 +321,10 @@ class ProcessingCoordinator:
             self.executor.shutdown(wait=True)
             
             self.is_initialized = False
-            logger.info("✅ ProcessingCoordinator limpiado")
+            logger.info("ProcessingCoordinator limpiado")
             
         except Exception as e:
-            logger.error(f"❌ Error limpiando ProcessingCoordinator: {e}")
+            logger.error(f"Error limpiando ProcessingCoordinator: {e}")
 
 
 # Instancia global del coordinador

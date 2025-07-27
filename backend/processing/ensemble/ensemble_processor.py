@@ -43,7 +43,7 @@ class EnsembleProcessor:
             self.ensemble_weights = processing_config.ensemble_weights
             self.confidence_threshold = processing_config.confidence_threshold
             
-            logger.info(f"🎯 Ensemble configurado - COCO: {self.coco_models}, Extendidos: {self.extended_models}")
+            logger.info(f"Ensemble configurado - COCO: {self.coco_models}, Extendidos: {self.extended_models}")
             
         except Exception as e:
             logger.error(f"Error cargando configuración ensemble: {e}")
@@ -369,7 +369,7 @@ class EnsembleProcessor:
         Returns:
             Resumen del procesamiento
         """
-        logger.info(f"🎯 Iniciando ensemble para sesión {patient_id}/{session_id}")
+        logger.info(f"Iniciando ensemble para sesión {patient_id}/{session_id}")
         
         try:
             from config import data_config

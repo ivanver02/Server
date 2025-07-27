@@ -34,7 +34,6 @@ class MMPoseDetector(BasePoseDetector):
         self.config_path = None
         self.checkpoint_path = None
         self.device = 'cuda' if self._is_cuda_available() else 'cpu'
-        self.supported_formats = ['image', 'video']  # MMPose soporta ambos
         
     def _is_cuda_available(self) -> bool:
         """Verificar si CUDA está disponible"""
@@ -44,7 +43,7 @@ class MMPoseDetector(BasePoseDetector):
         except ImportError:
             return False
     
-    def _find_model_files(self) -> bool:
+    def _find_model_files(self) -> bool: # Se usará simplemente para ver que existen los archivos necesarios
         """
         Buscar archivos de configuración (.py) y checkpoint (.pth) del modelo
         """
@@ -262,7 +261,6 @@ class MMPoseDetector(BasePoseDetector):
             'checkpoint_path': str(self.checkpoint_path) if self.checkpoint_path else None,
             'device': self.device,
             'is_initialized': self.is_initialized,
-            'supported_formats': self.supported_formats,
             'num_keypoints': self.get_num_keypoints(),
             'keypoint_names': self.get_keypoint_names()
         }

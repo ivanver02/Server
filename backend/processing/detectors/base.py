@@ -22,7 +22,6 @@ class BasePoseDetector(ABC):
         self.model_name = model_name
         self.model_path = model_path
         self.is_initialized = False
-        self.supported_formats = ['image', 'video']  # Formatos soportados
         
     @abstractmethod
     def initialize(self) -> bool:
@@ -64,10 +63,6 @@ class BasePoseDetector(ABC):
     def get_model_info(self) -> Dict[str, Any]:
         """Obtener información del modelo"""
         pass
-    
-    def supports_video_processing(self) -> bool:
-        """Verificar si el detector soporta procesamiento directo de video"""
-        return 'video' in self.supported_formats
     
     def get_keypoint_names(self) -> List[str]:
         """Obtener nombres de keypoints del modelo"""

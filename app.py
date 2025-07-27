@@ -92,7 +92,7 @@ def _check_and_trigger_3d_reconstruction(patient_id: str, session_id: str, chunk
                 )
                 
                 if result_3d:
-                    logger.info(f"✅ Reconstrucción 3D completada para chunk {chunk_number}")
+                    logger.info(f"Reconstrucción 3D completada para chunk {chunk_number}")
                 else:
                     logger.warning(f"⚠️  Reconstrucción 3D falló para chunk {chunk_number}")
                     
@@ -399,7 +399,7 @@ def receive_chunk():
             
             # Si tenemos todos los chunks, procesar inmediatamente
             if len(available_chunks) == current_session['cameras_count']:
-                logger.info(f"🎬 Todos los chunks {chunk_number} disponibles, procesando inmediatamente...")
+                logger.info(f"Todos los chunks {chunk_number} disponibles, procesando inmediatamente...")
                 
                 # Inicializar coordinador si no está inicializado
                 if not processing_coordinator.is_initialized:
@@ -416,14 +416,14 @@ def receive_chunk():
                 )
                 
                 if result.success:
-                    logger.info(f"✅ Chunk {chunk_number} procesado: {result.total_frames} frames, "
+                    logger.info(f"Chunk {chunk_number} procesado: {result.total_frames} frames, "
                                f"tiempo: {result.processing_time:.2f}s")
                     
                     # Verificar si podemos hacer reconstrucción 3D
                     _check_and_trigger_3d_reconstruction(patient_id, session_id, chunk_number)
                     
                 else:
-                    logger.error(f"❌ Error procesando chunk {chunk_number}: {result.errors}")
+                    logger.error(f"Error procesando chunk {chunk_number}: {result.errors}")
                     
         except Exception as processing_error:
             logger.error(f"Error en procesamiento inmediato: {processing_error}")
