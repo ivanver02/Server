@@ -44,7 +44,7 @@ class MMPoseInferencerWrapper:
         try:
             from mmpose.apis import MMPoseInferencer
             
-            logger.info("🤖 Inicializando modelos MMPose...")
+            logger.info("Inicializando modelos MMPose...")
             
             # Definir configuraciones de modelos con rutas directas
             self.model_configs = {

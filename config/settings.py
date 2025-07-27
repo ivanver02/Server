@@ -19,59 +19,6 @@ class ServerConfig:
     max_content_length: int = 100 * 1024 * 1024  # 100MB
     upload_folder: str = str(BASE_DIR / "data" / "unprocessed")
 
-@dataclass 
-class ProcessingConfig:
-    """Configuración del procesamiento de video"""
-    # FPS para extracción de frames
-    target_fps: int = 15
-    
-    # Modelos MMPose a usar
-    coco_models: List[str] = None
-    extended_models: List[str] = None
-    
-    # GPU configuration
-    primary_gpu: str = 'cuda:0'
-    secondary_gpu: str = 'cuda:1'
-    
-    # Thresholds
-    confidence_threshold: float = 0.3
-    ensemble_weights: Dict[str, float] = None
-    
-    def __post_init__(self):
-        if self.coco_models is None:
-            self.coco_models = [
-                'hrnet_w48_coco',
-                'hrnet_w32_coco'
-            ]
-        
-        if self.extended_models is None:
-            self.extended_models = [
-                'resnet50_rle_coco',
-                'wholebody_coco'
-            ]
-            
-        if self.ensemble_weights is None:
-            self.ensemble_weights = {
-                'hrnet_w48_coco': 0.6,
-                'hrnet_w32_coco': 0.4,
-                'resnet50_rle_coco': 1.0,
-                'wholebody_coco': 1.0
-            }
-
-@dataclass
-class ReconstructionConfig:
-    """Configuración para reconstrucción 3D"""
-    # Método de triangulación
-    triangulation_method: str = 'dlt'  # Direct Linear Transform
-    
-    # Optimización
-    optimize_triangulation: bool = True
-    max_iterations: int = 1000
-    convergence_threshold: float = 1e-6
-    
-    # Validación
-    max_reprojection_error: float = 5.0  # píxeles
-    min_cameras_for_point: int = 2
 
 @dataclass
 class DataConfig:
@@ -147,6 +94,39 @@ class MMPoseConfig:
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.configs_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+@dataclass
+class ProcessingConfig:
+    """Configuración para procesamiento de video"""
+    # Configuración de extracción de frames
+    target_fps: int = 15
+    max_frames_per_chunk: int = 100
+    
+    # Configuración de procesamiento paralelo
+    max_workers: int = 4
+    enable_parallel_processing: bool = True
+    
+    # Configuración de modelos por defecto
+    default_models: List[str] = None
+    
+    def __post_init__(self):
+        if self.default_models is None:
+            self.default_models = ['hrnet_w48_coco', 'vitpose_huge_coco']
+
+@dataclass
+class ReconstructionConfig:
+    """Configuración para reconstrucción 3D"""
+    # Configuración de calibración
+    min_cameras_for_triangulation: int = 2
+    max_reprojection_error: float = 2.0
+    
+    # Configuración de triangulación
+    min_confidence_score: float = 0.3
+    use_opencv_triangulation: bool = True
+    
+    # Configuración de suavizado
+    enable_temporal_smoothing: bool = True
+    smoothing_window_size: int = 5
 
 # Instancias globales de configuración
 server_config = ServerConfig()

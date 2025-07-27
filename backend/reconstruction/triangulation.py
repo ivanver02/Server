@@ -30,7 +30,7 @@ class Triangulator:
         self.max_reprojection_error = 5.0  # píxeles
         self.min_cameras_for_point = 2
         
-    def set_cameras(self, cameras: Dict[int, Any]):
+    def set_cameras(self, cameras: Dict[int, Any]): # No se usa por ahora
         """
         Establecer cámaras para triangulación
         
@@ -47,9 +47,126 @@ class Triangulator:
             else:
                 logger.warning(f"Cámara {camera_id} no está completamente calibrada")
         
-        logger.info(f"🎯 Triangulador configurado con {calibrated_count}/{len(self.cameras)} cámaras calibradas")
+        logger.info(f"Triangulador configurado con {calibrated_count}/{len(self.cameras)} cámaras calibradas")
+
+    def _compute_point_reprojection_error(self, point_3d: np.ndarray, 
+                                        points_2d_observed: List[np.ndarray],
+                                        projection_matrices: List[np.ndarray]) -> float:
+        """
+        Calcular error de reproyección para un punto 3D
+        
+        Args:
+            point_3d: Punto 3D (3,)
+            points_2d_observed: Puntos 2D observados
+            projection_matrices: Matrices de proyección
+            
+        Returns:
+            Error RMS de reproyección en píxeles
+        """
+        try:
+            errors = []
+            point_3d_homogeneous = np.append(point_3d, 1.0)  # Convertir a homogéneas
+            
+            for point_2d_obs, P in zip(points_2d_observed, projection_matrices):
+                # Proyectar punto 3D
+                point_2d_proj_homogeneous = P @ point_3d_homogeneous
+                
+                if abs(point_2d_proj_homogeneous[2]) > 1e-8:
+                    point_2d_proj = point_2d_proj_homogeneous[:2] / point_2d_proj_homogeneous[2]
+                    
+                    # Calcular error euclidiano
+                    error = np.linalg.norm(point_2d_proj - point_2d_obs)
+                    errors.append(error)
+            
+            return np.sqrt(np.mean(np.array(errors)**2)) if errors else float('inf')
+            
+        except Exception as e:
+            logger.debug(f"Error calculando reproyección: {e}")
+            return float('inf')
     
-    def triangulate_dlt(self, keypoints_multi_camera: Dict[int, np.ndarray]) -> TriangulationResult:
+
+    def _compute_camera_reprojection_errors(self, points_3d: np.ndarray,
+                                          keypoints_dict: Dict[int, np.ndarray],
+                                          cameras_dict: Dict[int, Any]) -> Dict[int, float]:
+        """
+        Calcular error de reproyección para cada cámara
+        
+        Args:
+            points_3d: Puntos 3D triangulados (N, 3)
+            keypoints_dict: {camera_id: keypoints_2d}
+            cameras_dict: {camera_id: Camera}
+            
+        Returns:
+            {camera_id: error_rms}
+        """
+        errors = {}
+        
+        try:
+            for camera_id, camera in cameras_dict.items():
+                if camera_id in keypoints_dict and len(points_3d) > 0:
+                    keypoints_2d = keypoints_dict[camera_id]
+                    n_points = min(len(points_3d), len(keypoints_2d))
+                    
+                    if n_points > 0:
+                        # Proyectar puntos 3D a la cámara
+                        projected_2d = camera.project_3d_to_2d(points_3d[:n_points])
+                        
+                        if len(projected_2d) > 0:
+                            # Calcular error
+                            observed_2d = keypoints_2d[:n_points]
+                            differences = projected_2d - observed_2d
+                            rms_error = np.sqrt(np.mean(np.sum(differences**2, axis=1)))
+                            errors[camera_id] = rms_error
+            
+            return errors
+            
+        except Exception as e:
+            logger.error(f"Error calculando errores de cámara: {e}")
+            return {}
+
+    def _triangulate_point_dlt(self, points_2d: List[np.ndarray], 
+                              projection_matrices: List[np.ndarray]) -> Optional[np.ndarray]:
+        """
+        Triangular un punto usando Direct Linear Transform
+        
+        Args:
+            points_2d: Lista de puntos 2D (cada uno shape (2,))
+            projection_matrices: Lista de matrices de proyección (cada una 3x4)
+            
+        Returns:
+            Punto 3D (3,) o None si falla
+        """
+        try:
+            n_views = len(points_2d)
+            if n_views < 2:
+                return None
+            
+            # Construir sistema de ecuaciones Ax = 0
+            A = np.zeros((2 * n_views, 4))
+            
+            for i, (point_2d, P) in enumerate(zip(points_2d, projection_matrices)):
+                x, y = point_2d
+                
+                # Ecuaciones del DLT
+                A[2*i] = x * P[2] - P[0]      # x * P[2,:] - P[0,:]
+                A[2*i + 1] = y * P[2] - P[1]  # y * P[2,:] - P[1,:]
+            
+            # Resolver usando SVD
+            _, _, Vt = np.linalg.svd(A)
+            point_3d_homogeneous = Vt[-1]  # Última fila de V (última columna de V^T)
+            
+            # Convertir de coordenadas homogéneas a cartesianas
+            if abs(point_3d_homogeneous[3]) > 1e-8:
+                point_3d = point_3d_homogeneous[:3] / point_3d_homogeneous[3]
+                return point_3d
+            else:
+                return None
+                
+        except Exception as e:
+            logger.debug(f"Error en DLT para punto: {e}")
+            return None
+    
+    def triangulate_dlt(self, keypoints_multi_camera: Dict[int, np.ndarray]) -> TriangulationResult: # Primera opción para triangulación
         """
         Triangulación usando Direct Linear Transform (DLT)
         
@@ -60,7 +177,7 @@ class Triangulator:
             Resultado de triangulación
         """
         try:
-            logger.debug(f"🔺 Triangulando con DLT: {len(keypoints_multi_camera)} cámaras")
+            logger.debug(f"Triangulando con DLT: {len(keypoints_multi_camera)} cámaras")
             
             # Filtrar cámaras calibradas
             valid_cameras = {}
@@ -154,7 +271,7 @@ class Triangulator:
                 }
             )
             
-            logger.debug(f"✅ DLT completado: {len(points_3d)}/{n_points} puntos triangulados")
+            logger.debug(f"DLT completado: {len(points_3d)}/{n_points} puntos triangulados")
             return result
             
         except Exception as e:
@@ -167,123 +284,7 @@ class Triangulator:
                 processing_info={'error': str(e)}
             )
     
-    def _triangulate_point_dlt(self, points_2d: List[np.ndarray], 
-                              projection_matrices: List[np.ndarray]) -> Optional[np.ndarray]:
-        """
-        Triangular un punto usando Direct Linear Transform
-        
-        Args:
-            points_2d: Lista de puntos 2D (cada uno shape (2,))
-            projection_matrices: Lista de matrices de proyección (cada una 3x4)
-            
-        Returns:
-            Punto 3D (3,) o None si falla
-        """
-        try:
-            n_views = len(points_2d)
-            if n_views < 2:
-                return None
-            
-            # Construir sistema de ecuaciones Ax = 0
-            A = np.zeros((2 * n_views, 4))
-            
-            for i, (point_2d, P) in enumerate(zip(points_2d, projection_matrices)):
-                x, y = point_2d
-                
-                # Ecuaciones del DLT
-                A[2*i] = x * P[2] - P[0]      # x * P[2,:] - P[0,:]
-                A[2*i + 1] = y * P[2] - P[1]  # y * P[2,:] - P[1,:]
-            
-            # Resolver usando SVD
-            _, _, Vt = np.linalg.svd(A)
-            point_3d_homogeneous = Vt[-1]  # Última fila de V (última columna de V^T)
-            
-            # Convertir de coordenadas homogéneas a cartesianas
-            if abs(point_3d_homogeneous[3]) > 1e-8:
-                point_3d = point_3d_homogeneous[:3] / point_3d_homogeneous[3]
-                return point_3d
-            else:
-                return None
-                
-        except Exception as e:
-            logger.debug(f"Error en DLT para punto: {e}")
-            return None
-    
-    def _compute_point_reprojection_error(self, point_3d: np.ndarray, 
-                                        points_2d_observed: List[np.ndarray],
-                                        projection_matrices: List[np.ndarray]) -> float:
-        """
-        Calcular error de reproyección para un punto 3D
-        
-        Args:
-            point_3d: Punto 3D (3,)
-            points_2d_observed: Puntos 2D observados
-            projection_matrices: Matrices de proyección
-            
-        Returns:
-            Error RMS de reproyección en píxeles
-        """
-        try:
-            errors = []
-            point_3d_homogeneous = np.append(point_3d, 1.0)  # Convertir a homogéneas
-            
-            for point_2d_obs, P in zip(points_2d_observed, projection_matrices):
-                # Proyectar punto 3D
-                point_2d_proj_homogeneous = P @ point_3d_homogeneous
-                
-                if abs(point_2d_proj_homogeneous[2]) > 1e-8:
-                    point_2d_proj = point_2d_proj_homogeneous[:2] / point_2d_proj_homogeneous[2]
-                    
-                    # Calcular error euclidiano
-                    error = np.linalg.norm(point_2d_proj - point_2d_obs)
-                    errors.append(error)
-            
-            return np.sqrt(np.mean(np.array(errors)**2)) if errors else float('inf')
-            
-        except Exception as e:
-            logger.debug(f"Error calculando reproyección: {e}")
-            return float('inf')
-    
-    def _compute_camera_reprojection_errors(self, points_3d: np.ndarray,
-                                          keypoints_dict: Dict[int, np.ndarray],
-                                          cameras_dict: Dict[int, Any]) -> Dict[int, float]:
-        """
-        Calcular error de reproyección para cada cámara
-        
-        Args:
-            points_3d: Puntos 3D triangulados (N, 3)
-            keypoints_dict: {camera_id: keypoints_2d}
-            cameras_dict: {camera_id: Camera}
-            
-        Returns:
-            {camera_id: error_rms}
-        """
-        errors = {}
-        
-        try:
-            for camera_id, camera in cameras_dict.items():
-                if camera_id in keypoints_dict and len(points_3d) > 0:
-                    keypoints_2d = keypoints_dict[camera_id]
-                    n_points = min(len(points_3d), len(keypoints_2d))
-                    
-                    if n_points > 0:
-                        # Proyectar puntos 3D a la cámara
-                        projected_2d = camera.project_3d_to_2d(points_3d[:n_points])
-                        
-                        if len(projected_2d) > 0:
-                            # Calcular error
-                            observed_2d = keypoints_2d[:n_points]
-                            differences = projected_2d - observed_2d
-                            rms_error = np.sqrt(np.mean(np.sum(differences**2, axis=1)))
-                            errors[camera_id] = rms_error
-            
-            return errors
-            
-        except Exception as e:
-            logger.error(f"Error calculando errores de cámara: {e}")
-            return {}
-    
-    def triangulate_opencv(self, keypoints_multi_camera: Dict[int, np.ndarray]) -> TriangulationResult:
+    def triangulate_opencv(self, keypoints_multi_camera: Dict[int, np.ndarray]) -> TriangulationResult: # Segunda opción para triangulación
         """
         Triangulación usando cv2.triangulatePoints (solo para 2 cámaras)
         
@@ -370,7 +371,7 @@ class Triangulator:
                 }
             )
             
-            logger.debug(f"✅ OpenCV triangulación completada: {len(points_3d)} puntos")
+            logger.debug(f"OpenCV triangulación completada: {len(points_3d)} puntos")
             return result
             
         except Exception as e:
@@ -382,9 +383,52 @@ class Triangulator:
                 triangulation_method='opencv',
                 processing_info={'error': str(e)}
             )
+        
+    def _load_frame_keypoints(self, patient_id: str, session_id: str, 
+                            global_frame: int) -> Dict[int, np.ndarray]:
+        """
+        Cargar keypoints 2D procesados de un frame
+        
+        Args:
+            patient_id: ID del paciente
+            session_id: ID de la sesión  
+            global_frame: Número global del frame
+            
+        Returns:
+            {camera_id: keypoints_2d}
+        """
+        keypoints_dict = {}
+        
+        try:
+            from config import data_config
+            
+            session_dir = data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}"
+            
+            if not session_dir.exists():
+                return keypoints_dict
+            
+            # Buscar en cada cámara
+            for camera_dir in session_dir.iterdir():
+                if camera_dir.is_dir() and camera_dir.name.startswith('camera'):
+                    camera_id = int(camera_dir.name.replace('camera', ''))
+                    
+                    keypoints_file = camera_dir / f"{global_frame}.npy"
+                    
+                    if keypoints_file.exists():
+                        keypoints = np.load(keypoints_file)
+                        if len(keypoints) > 0:
+                            keypoints_dict[camera_id] = keypoints
+            
+            logger.debug(f"Keypoints cargados para frame {global_frame}: {list(keypoints_dict.keys())}")
+            return keypoints_dict
+            
+        except Exception as e:
+            logger.error(f"Error cargando keypoints para frame {global_frame}: {e}")
+            return {}
+    
     
     def triangulate_frame(self, patient_id: str, session_id: str, 
-                         global_frame: int, method: str = 'dlt') -> TriangulationResult:
+                         global_frame: int, method: str = 'dlt') -> TriangulationResult: # No se usa por ahora
         """
         Triangular keypoints 2D de un frame específico
         
@@ -439,51 +483,9 @@ class Triangulator:
                 processing_info={'error': str(e)}
             )
     
-    def _load_frame_keypoints(self, patient_id: str, session_id: str, 
-                            global_frame: int) -> Dict[int, np.ndarray]:
-        """
-        Cargar keypoints 2D procesados de un frame
-        
-        Args:
-            patient_id: ID del paciente
-            session_id: ID de la sesión  
-            global_frame: Número global del frame
-            
-        Returns:
-            {camera_id: keypoints_2d}
-        """
-        keypoints_dict = {}
-        
-        try:
-            from config import data_config
-            
-            session_dir = data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}"
-            
-            if not session_dir.exists():
-                return keypoints_dict
-            
-            # Buscar en cada cámara
-            for camera_dir in session_dir.iterdir():
-                if camera_dir.is_dir() and camera_dir.name.startswith('camera'):
-                    camera_id = int(camera_dir.name.replace('camera', ''))
-                    
-                    keypoints_file = camera_dir / f"{global_frame}.npy"
-                    
-                    if keypoints_file.exists():
-                        keypoints = np.load(keypoints_file)
-                        if len(keypoints) > 0:
-                            keypoints_dict[camera_id] = keypoints
-            
-            logger.debug(f"Keypoints cargados para frame {global_frame}: {list(keypoints_dict.keys())}")
-            return keypoints_dict
-            
-        except Exception as e:
-            logger.error(f"Error cargando keypoints para frame {global_frame}: {e}")
-            return {}
-    
     def save_triangulation_result(self, result: TriangulationResult, 
                                 patient_id: str, session_id: str, 
-                                global_frame: int) -> bool:
+                                global_frame: int) -> bool: # No se usa por ahora
         """
         Guardar resultado de triangulación en disco
         

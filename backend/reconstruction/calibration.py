@@ -42,7 +42,7 @@ class CalibrationSystem:
         if self.reference_camera_id is None:
             self.set_reference_camera(camera_id)
         
-        logger.info(f"📷 Cámara {camera_id} añadida al sistema")
+        logger.info(f"Cámara {camera_id} añadida al sistema")
         return camera
     
     def set_reference_camera(self, camera_id: int):
@@ -63,9 +63,9 @@ class CalibrationSystem:
         self.reference_camera_id = camera_id
         self.cameras[camera_id].set_as_reference()
         
-        logger.info(f"📐 Cámara {camera_id} establecida como referencia")
+        logger.info(f"Cámara {camera_id} establecida como referencia")
     
-    def calibrate_camera_intrinsics(self, camera_id: int, chessboard_images: List[np.ndarray]) -> CameraCalibrationResult:
+    def calibrate_camera_intrinsics(self, camera_id: int, chessboard_images: List[np.ndarray]) -> CameraCalibrationResult: # Llama a la calibración intrínseca implementada por la cámara
         """
         Calibrar parámetros intrínsecos de una cámara usando tablero de ajedrez
         
@@ -83,7 +83,7 @@ class CalibrationSystem:
         chessboard_size = camera_intrinsics.CHESSBOARD_SIZE
         square_size = camera_intrinsics.SQUARE_SIZE
         
-        logger.info(f"🎯 Calibrando intrínsecos cámara {camera_id} con {len(chessboard_images)} imágenes")
+        logger.info(f"Calibrando intrínsecos cámara {camera_id} con {len(chessboard_images)} imágenes")
         
         result = self.cameras[camera_id].calibrate_intrinsics_from_chessboard(
             chessboard_images, chessboard_size, square_size
@@ -99,93 +99,11 @@ class CalibrationSystem:
                     result.distortion_coeffs,
                     self.cameras[camera_id].serial_number
                 )
-                logger.info(f"✅ Intrínsecos actualizados globalmente para cámara {camera_id}")
+                logger.info(f"Intrínsecos actualizados globalmente para cámara {camera_id}")
             else:
-                logger.warning(f"⚠️ Calibración de baja calidad para cámara {camera_id}: {result.reprojection_error:.3f}")
+                logger.warning(f"Calibración de baja calidad para cámara {camera_id}: {result.reprojection_error:.3f}")
         
         return result
-    
-    def estimate_camera_pose_from_keypoints(self, camera_id: int, keypoints_2d_multi_frame: List[np.ndarray],
-                                          reference_3d_points: np.ndarray) -> bool:
-        """
-        Estimar pose de cámara usando keypoints 2D y puntos 3D de referencia
-        
-        Args:
-            camera_id: ID de la cámara
-            keypoints_2d_multi_frame: Lista de keypoints 2D para múltiples frames
-            reference_3d_points: Puntos 3D de referencia
-            
-        Returns:
-            True si la estimación fue exitosa
-        """
-        if camera_id not in self.cameras:
-            raise ValueError(f"Cámara {camera_id} no existe")
-        
-        camera = self.cameras[camera_id]
-        
-        if not camera.intrinsics_calibrated:
-            logger.error(f"Cámara {camera_id} no tiene intrínsecos calibrados")
-            return False
-        
-        try:
-            logger.info(f"🎯 Estimando pose para cámara {camera_id} usando {len(keypoints_2d_multi_frame)} frames")
-            
-            # Usar múltiples frames para estimación robusta
-            best_error = float('inf')
-            best_rvec = None
-            best_tvec = None
-            
-            for frame_keypoints in keypoints_2d_multi_frame:
-                if len(frame_keypoints) < 4:  # Mínimo 4 puntos para solvePnP
-                    continue
-                
-                # Tomar solo los puntos que tenemos en referencia 3D
-                n_points = min(len(frame_keypoints), len(reference_3d_points))
-                if n_points < 4:
-                    continue
-                
-                object_points = reference_3d_points[:n_points]
-                image_points = frame_keypoints[:n_points]
-                
-                # Resolver PnP
-                success, rvec, tvec = cv2.solvePnP(
-                    object_points,
-                    image_points,
-                    camera.camera_matrix,
-                    camera.distortion_coeffs,
-                    flags=cv2.SOLVEPNP_ITERATIVE
-                )
-                
-                if success:
-                    # Calcular error de reproyección
-                    projected_points, _ = cv2.projectPoints(
-                        object_points, rvec, tvec, 
-                        camera.camera_matrix, camera.distortion_coeffs
-                    )
-                    
-                    error = np.mean(np.sqrt(np.sum((projected_points.reshape(-1, 2) - image_points)**2, axis=1)))
-                    
-                    if error < best_error:
-                        best_error = error
-                        best_rvec = rvec
-                        best_tvec = tvec
-            
-            if best_rvec is not None:
-                # Convertir vector de rotación a matriz
-                rotation_matrix, _ = cv2.Rodrigues(best_rvec)
-                
-                # Establecer parámetros extrínsecos
-                camera.set_extrinsics(rotation_matrix, best_tvec)
-                
-                logger.info(f"✅ Pose estimada para cámara {camera_id}: error {best_error:.3f} píxeles")
-                return True
-            else:
-                logger.error(f"❌ No se pudo estimar pose para cámara {camera_id}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error estimando pose para cámara {camera_id}: {e}")
-            return False
     
     def calibrate_stereo_pair(self, camera1_id: int, camera2_id: int,
                              keypoints_pairs: List[Tuple[np.ndarray, np.ndarray]]) -> bool:
@@ -211,7 +129,7 @@ class CalibrationSystem:
             return False
         
         try:
-            logger.info(f"🔗 Calibrando par estéreo: cámaras {camera1_id} - {camera2_id}")
+            logger.info(f"Calibrando par estéreo: cámaras {camera1_id} - {camera2_id}")
             
             # Preparar puntos para calibración estéreo
             image_points1 = []
@@ -261,10 +179,10 @@ class CalibrationSystem:
                     self.set_reference_camera(camera1_id)
                     camera2.set_extrinsics(R, t)
                 
-                logger.info(f"✅ Calibración estéreo exitosa para cámaras {camera1_id} - {camera2_id}")
+                logger.info(f"Calibración estéreo exitosa para cámaras {camera1_id} - {camera2_id}")
                 return True
             else:
-                logger.error("❌ No se pudo calcular matriz esencial")
+                logger.error("No se pudo calcular matriz esencial")
                 return False
                 
         except Exception as e:
@@ -283,7 +201,7 @@ class CalibrationSystem:
             Resultado de la calibración
         """
         try:
-            logger.info(f"🔧 Auto-calibrando extrínsecos para sesión {patient_id}/{session_id}")
+            logger.info(f"Auto-calibrando extrínsecos para sesión {patient_id}/{session_id}")
             
             from config import data_config
             
@@ -373,9 +291,9 @@ class CalibrationSystem:
             }
             
             if result['success']:
-                logger.info(f"✅ Auto-calibración exitosa: {len(calibrated_cameras)} cámaras calibradas")
+                logger.info(f"Auto-calibración exitosa: {len(calibrated_cameras)} cámaras calibradas")
             else:
-                logger.error("❌ Auto-calibración falló")
+                logger.error("Auto-calibración falló")
             
             return result
             
@@ -428,7 +346,7 @@ class CalibrationSystem:
                 }
             
             np.savez(file_path, **calibration_data)
-            logger.info(f"💾 Calibración del sistema guardada: {file_path}")
+            logger.info(f"Calibración del sistema guardada: {file_path}")
             
         except Exception as e:
             logger.error(f"Error guardando calibración: {e}")
@@ -464,7 +382,7 @@ class CalibrationSystem:
                 camera.intrinsics_calibrated = True
                 camera._update_projection_matrix()
             
-            logger.info(f"📂 Calibración del sistema cargada: {file_path}")
+            logger.info(f"Calibración del sistema cargada: {file_path}")
             return True
             
         except Exception as e:

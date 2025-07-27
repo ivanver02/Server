@@ -98,15 +98,6 @@ photos_from_video/
 *.bmp
 *.tiff
 
-# Modelos MMPose grandes (archivos .pth)
-mmpose_models/checkpoints/*.pth
-mmpose_models/checkpoints/*.ckpt
-*.pth
-*.pt
-*.ckpt
-*.h5
-*.onnx
-
 # Cache de MMPose/Computer Vision
 .mmpose_cache/
 mmpose_cache/

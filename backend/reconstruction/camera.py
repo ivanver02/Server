@@ -82,7 +82,7 @@ class Camera:
         
         self._update_projection_matrix()
         
-        logger.info(f"📐 Cámara {self.camera_id} establecida como referencia")
+        logger.info(f"Cámara {self.camera_id} establecida como referencia")
     
     def set_extrinsics(self, rotation_matrix: np.ndarray, translation_vector: np.ndarray):
         """
@@ -135,7 +135,7 @@ class Camera:
             logger.error(f"Error calculando matriz de proyección para cámara {self.camera_id}: {e}")
             self.projection_matrix = None
     
-    def project_3d_to_2d(self, points_3d: np.ndarray) -> np.ndarray:
+    def project_3d_to_2d(self, points_3d: np.ndarray) -> np.ndarray: # Para calcular el error de reproyección
         """
         Proyectar puntos 3D a coordenadas 2D de imagen
         
@@ -308,7 +308,7 @@ class Camera:
                 self.distortion_coeffs = dist_coeffs
                 self.intrinsics_calibrated = True
                 
-                logger.info(f"✅ Calibración intrínseca exitosa para cámara {self.camera_id}: "
+                logger.info(f"Calibración intrínseca exitosa para cámara {self.camera_id}: "
                            f"Error: {mean_error:.3f}, Puntos: {total_points}")
                 
                 return CameraCalibrationResult(
@@ -319,7 +319,7 @@ class Camera:
                     distortion_coeffs=dist_coeffs
                 )
             else:
-                logger.error(f"❌ Falló calibración intrínseca para cámara {self.camera_id}")
+                logger.error(f"Falló calibración intrínseca para cámara {self.camera_id}")
                 return CameraCalibrationResult(
                     success=False,
                     reprojection_error=float('inf'),
@@ -353,7 +353,7 @@ class Camera:
             'translation_vector_available': self.translation_vector is not None
         }
     
-    def save_parameters(self, file_path: str):
+    def save_parameters(self, file_path: str): # No usado por ahora
         """Guardar parámetros de la cámara en archivo"""
         try:
             params = {
@@ -367,12 +367,12 @@ class Camera:
             }
             
             np.savez(file_path, **params)
-            logger.info(f"💾 Parámetros guardados para cámara {self.camera_id}: {file_path}")
+            logger.info(f"Parámetros guardados para cámara {self.camera_id}: {file_path}")
             
         except Exception as e:
             logger.error(f"Error guardando parámetros para cámara {self.camera_id}: {e}")
     
-    def load_parameters(self, file_path: str) -> bool:
+    def load_parameters(self, file_path: str) -> bool: # No usado por ahora
         """
         Cargar parámetros de la cámara desde archivo
         
@@ -396,7 +396,7 @@ class Camera:
             self.intrinsics_calibrated = True
             self._update_projection_matrix()
             
-            logger.info(f"📂 Parámetros cargados para cámara {self.camera_id}: {file_path}")
+            logger.info(f"Parámetros cargados para cámara {self.camera_id}: {file_path}")
             return True
             
         except Exception as e:

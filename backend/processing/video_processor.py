@@ -34,19 +34,19 @@ class VideoProcessor:
             True si se inicializó correctamente
         """
         try:
-            logger.info("🚀 Inicializando VideoProcessor...")
+            logger.info("Inicializando VideoProcessor...")
             
             # Inicializar wrapper de MMPose
             if not mmpose_wrapper.initialize_models():
-                logger.error("❌ Error inicializando modelos MMPose")
+                logger.error("Error inicializando modelos MMPose")
                 return False
             
             self.is_initialized = True
-            logger.info("✅ VideoProcessor inicializado correctamente")
+            logger.info("VideoProcessor inicializado correctamente")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error inicializando VideoProcessor: {e}")
+            logger.error(f"Error inicializando VideoProcessor: {e}")
             return False
     
     def process_video_chunk(self, patient_id: str, session_id: str, 
@@ -128,10 +128,10 @@ class VideoProcessor:
             result.processing_time = total_time
             
             if result.success:
-                logger.info(f"✅ Chunk {chunk_number} procesado exitosamente en {total_time:.2f}s - "
+                logger.info(f"Chunk {chunk_number} procesado exitosamente en {total_time:.2f}s - "
                            f"Frames: {result.frames_extracted}, Procesados: {result.frames_processed}")
             else:
-                logger.error(f"❌ Error procesando chunk {chunk_number}: {result.errors}")
+                logger.error(f"Error procesando chunk {chunk_number}: {result.errors}")
             
             return result
             
@@ -232,10 +232,10 @@ class VideoProcessor:
             }
             
             if success:
-                logger.info(f"✅ Procesamiento completo exitoso chunk {chunk_number} - "
+                logger.info(f"Procesamiento completo exitoso chunk {chunk_number} - "
                            f"Ensemble: {len(ensemble_results)} frames")
             else:
-                logger.error(f"❌ Errores en procesamiento chunk {chunk_number}: {ensemble_errors}")
+                logger.error(f"Errores en procesamiento chunk {chunk_number}: {ensemble_errors}")
             
             return result
             
@@ -351,7 +351,7 @@ class VideoProcessor:
             
             self.is_initialized = False
             
-            logger.info("✅ VideoProcessor limpiado")
+            logger.info("VideoProcessor limpiado")
             
         except Exception as e:
             logger.error(f"Error limpiando VideoProcessor: {e}")

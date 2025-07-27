@@ -42,7 +42,7 @@ def health_check():
     """Endpoint de salud del servidor"""
     return jsonify({
         'status': 'healthy',
-        'service': 'gonitrosis-analysis-server',
+        'service': 'gonarthrosis-analysis-server',
         'version': '1.0.0'
     })
 
@@ -109,7 +109,7 @@ def start_session():
             'cameras_count': cameras_count
         })
         
-        logger.info(f"📋 Sesión iniciada - Paciente: {patient_id}, Sesión: {session_id}, Cámaras: {cameras_count}")
+        logger.info(f"Sesión iniciada - Paciente: {patient_id}, Sesión: {session_id}, Cámaras: {cameras_count}")
         
         return jsonify({
             'status': 'session_started',
@@ -149,7 +149,7 @@ def cancel_session():
         if session_path.exists():
             import shutil
             shutil.rmtree(session_path)
-            logger.info(f"🗑️ Directorio de sesión eliminado: {session_path}")
+            logger.info(f"Directorio de sesión eliminado: {session_path}")
         
         # También limpiar datos procesados si existen
         processed_paths = [
@@ -162,10 +162,10 @@ def cancel_session():
             if path.exists():
                 import shutil
                 shutil.rmtree(path)
-                logger.info(f"🗑️ Directorio procesado eliminado: {path}")
+                logger.info(f"Directorio procesado eliminado: {path}")
         
         # Reiniciar sesión
-        logger.info(f"❌ Sesión cancelada - Paciente: {patient_id}, Sesión: {session_id}")
+        logger.info(f"Sesión cancelada - Paciente: {patient_id}, Sesión: {session_id}")
         
         old_session = current_session.copy()
         current_session.update({
@@ -239,7 +239,7 @@ def receive_chunk():
         
         file.save(str(file_path))
         
-        logger.info(f"📹 Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
+        logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
         
         # TODO: Iniciar procesamiento asíncrono del chunk
         # process_video_chunk.delay(str(file_path), patient_id, session_id, camera_id, chunk_number)
@@ -269,7 +269,7 @@ def recalibrate_cameras():
         # TODO: Implementar recalibración de parámetros extrínsecos
         # usando keypoints 2D de múltiples frames
         
-        logger.info("🔧 Iniciando recalibración de cámaras...")
+        logger.info("Iniciando recalibración de cámaras...")
         
         return jsonify({
             'status': 'recalibration_started',
@@ -297,9 +297,9 @@ def internal_error(e):
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    logger.info(f"🚀 Iniciando servidor de análisis de gonartrosis...")
-    logger.info(f"📡 Puerto: {server_config.port}")
-    logger.info(f"📁 Directorio de datos: {data_config.base_data_dir}")
+    logger.info(f"Iniciando servidor de análisis de gonartrosis...")
+    logger.info(f"Puerto: {server_config.port}")
+    logger.info(f"Directorio de datos: {data_config.base_data_dir}")
     
     app.run(
         host=server_config.host,
