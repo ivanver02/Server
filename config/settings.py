@@ -98,6 +98,8 @@ class ProcessingConfig:
     
     # Configuración de modelos por defecto
     default_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
+    coco_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
+    extended_models: List[str] = field(default_factory=lambda: [])
 
 @dataclass
 class ReconstructionConfig:

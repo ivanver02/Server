@@ -244,19 +244,6 @@ def start_session():
         for camera_id in range(cameras_count):
             base_dir = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}" / f"camera{camera_id}"
             base_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Crear subdirectorios para datos 2D
-            points_dir = base_dir / "2D" / "points"
-            confidence_dir = base_dir / "2D" / "confidence"
-            
-            # Crear directorios para cada modelo
-            from config import processing_config
-            all_models = processing_config.coco_models + processing_config.extended_models
-            
-            for model_name in all_models:
-                (points_dir / model_name).mkdir(parents=True, exist_ok=True)
-                (confidence_dir / model_name).mkdir(parents=True, exist_ok=True)
-            
             session_dirs.append(str(base_dir))
         
         # Activar sesión

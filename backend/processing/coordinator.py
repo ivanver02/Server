@@ -49,35 +49,20 @@ class ProcessingCoordinator:
             # 1. Cargar configuración
             from config import processing_config
             
-            # 2. Configurar detectores MMPose
-            if hasattr(processing_config, 'models_base_path') and processing_config.models_base_path:
-                models_path = Path(processing_config.models_base_path)
-                if models_path.exists():
-                    # Auto-descubrir modelos
-                    discovered = self.detector_manager.auto_discover_models(models_path)
-                    logger.info(f"Modelos auto-descubiertos: {discovered}")
-                else:
-                    logger.warning(f"Directorio de modelos no existe: {models_path}")
-            
-            # Registrar modelos específicos si están configurados
+            # Registrar modelos específicos
             all_models = []
             if hasattr(processing_config, 'coco_models'):
                 all_models.extend(processing_config.coco_models)
             if hasattr(processing_config, 'extended_models'):
                 all_models.extend(processing_config.extended_models)
             
-            for model_name in all_models:
-                if hasattr(processing_config, 'models_base_path'):
-                    model_path = Path(processing_config.models_base_path) / model_name
-                    if model_path.exists():
-                        if self.detector_manager.register_mmpose_model(model_name, model_path):
-                            logger.info(f"Modelo registrado: {model_name}")
-                        else:
-                            logger.warning(f"Error registrando modelo: {model_name}")
-                    else:
-                        logger.warning(f"Modelo no encontrado: {model_path}")
+            # Si no hay modelos configurados, usar los por defecto
+            if not all_models and hasattr(processing_config, 'default_models'):
+                all_models = processing_config.default_models
+                
+            logger.info(f"Modelos configurados: {all_models}")
             
-            # 3. Inicializar detectores
+            # Inicializar detectores
             if not self.detector_manager.initialize_all():
                 logger.error("Error inicializando detectores")
                 return False
