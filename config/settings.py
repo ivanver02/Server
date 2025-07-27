@@ -3,7 +3,7 @@ Configuración general del sistema de procesamiento de video
 Sistema de análisis de marcha para detección de gonartrosis
 """
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 from pathlib import Path
 
@@ -25,12 +25,6 @@ class DataConfig:
     """Configuración de directorios de datos"""
     base_data_dir: Path = BASE_DIR / "data"
     unprocessed_dir: Path = base_data_dir / "unprocessed"
-    processed_dir: Path = base_data_dir / "processed"
-    
-    # Subdirectorios procesados
-    photos_dir: Path = processed_dir / "photos_from_video"
-    keypoints_2d_dir: Path = processed_dir / "2D_keypoints"
-    keypoints_3d_dir: Path = processed_dir / "3D_keypoints"
     
     # Logs
     logs_dir: Path = BASE_DIR / "logs"
@@ -40,10 +34,6 @@ class DataConfig:
         dirs_to_create = [
             self.base_data_dir,
             self.unprocessed_dir,
-            self.processed_dir,
-            self.photos_dir,
-            self.keypoints_2d_dir,
-            self.keypoints_3d_dir,
             self.logs_dir
         ]
         
@@ -107,11 +97,7 @@ class ProcessingConfig:
     enable_parallel_processing: bool = True
     
     # Configuración de modelos por defecto
-    default_models: List[str] = None
-    
-    def __post_init__(self):
-        if self.default_models is None:
-            self.default_models = ['hrnet_w48_coco', 'vitpose_huge_coco']
+    default_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
 
 @dataclass
 class ReconstructionConfig:

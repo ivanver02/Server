@@ -4,9 +4,11 @@ Sistema de análisis de marcha para detección de gonartrosis
 """
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import os
 import logging
+import json
+import numpy as np
 from pathlib import Path
+from typing import Dict
 
 # Configurar logging
 logging.basicConfig(
@@ -17,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Importar configuraciones
 from config import server_config, data_config
+from backend.processing import processing_coordinator
+from backend.reconstruction.triangulation import Triangulator
 
 # Crear aplicación Flask
 app = Flask(__name__)
@@ -36,6 +40,159 @@ current_session = {
     'is_active': False,
     'cameras_count': 0
 }
+
+def _check_and_trigger_3d_reconstruction(patient_id: str, session_id: str, chunk_number: int):
+    """
+    Verificar si tenemos todos los keypoints 2D necesarios para reconstrucción 3D
+    y activar triangulación si están disponibles
+    """
+    try:
+        # Verificar si tenemos keypoints 2D procesados de todas las cámaras para este chunk
+        session_base = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}"
+        
+        # Verificar resultados de procesamiento 2D
+        keypoints_available = True
+        camera_keypoints = {}
+        
+        # Calcular global_frame (mismo cálculo que en el coordinador)
+        global_frame_base = chunk_number * 1000  # Frames base para este chunk
+        
+        for camera_id in range(current_session['cameras_count']):
+            camera_dir = session_base / f"camera{camera_id}"
+            
+            if camera_dir.exists():
+                # Buscar archivos de keypoints .npy para este chunk
+                keypoint_files = list(camera_dir.glob(f"{global_frame_base}*_*.npy"))
+                # Filtrar solo archivos de keypoints (no confidence)
+                keypoint_files = [f for f in keypoint_files if "_confidence" not in f.name]
+                
+                if keypoint_files:
+                    camera_keypoints[camera_id] = keypoint_files
+                    logger.debug(f"Cámara {camera_id}: {len(keypoint_files)} archivos de keypoints encontrados")
+                else:
+                    keypoints_available = False
+                    logger.debug(f"Cámara {camera_id}: No se encontraron keypoints para chunk {chunk_number}")
+                    break
+            else:
+                keypoints_available = False
+                logger.debug(f"Directorio cámara {camera_id} no existe")
+                break
+        
+        if keypoints_available and len(camera_keypoints) == current_session['cameras_count']:
+            logger.info(f"🔺 Iniciando reconstrucción 3D para chunk {chunk_number}")
+            
+            # Llamar al triangulador
+            try:
+                triangulator = Triangulator()
+                
+                # Configurar triangulador (por ahora simple, sin cámaras calibradas)
+                result_3d = _triangulate_chunk_simple(
+                    triangulator, camera_keypoints, patient_id, session_id, chunk_number
+                )
+                
+                if result_3d:
+                    logger.info(f"✅ Reconstrucción 3D completada para chunk {chunk_number}")
+                else:
+                    logger.warning(f"⚠️  Reconstrucción 3D falló para chunk {chunk_number}")
+                    
+            except Exception as triangulation_error:
+                logger.error(f"Error en triangulación: {triangulation_error}")
+        else:
+            logger.debug(f"Reconstrucción 3D no disponible aún para chunk {chunk_number}: "
+                        f"{len(camera_keypoints)}/{current_session['cameras_count']} cámaras")
+            
+    except Exception as e:
+        logger.error(f"Error verificando reconstrucción 3D: {e}")
+
+
+def _triangulate_chunk_simple(triangulator: Triangulator, camera_keypoints: Dict[int, list], 
+                            patient_id: str, session_id: str, chunk_number: int) -> bool:
+    """
+    Realizar triangulación simple para un chunk
+    """
+    try:
+        from config import data_config
+        
+        # Procesar cada frame del chunk
+        processed_frames = 0
+        
+        # Agrupar archivos por global_frame
+        frames_data = {}
+        
+        for camera_id, keypoint_files in camera_keypoints.items():
+            for file_path in keypoint_files:
+                # Extraer global_frame del nombre del archivo
+                filename = file_path.stem  # Nombre sin extensión
+                parts = filename.split('_')
+                if len(parts) >= 2:
+                    global_frame = int(parts[0])
+                    detector_name = '_'.join(parts[1:])
+                    
+                    if global_frame not in frames_data:
+                        frames_data[global_frame] = {}
+                    
+                    if camera_id not in frames_data[global_frame]:
+                        frames_data[global_frame][camera_id] = {}
+                    
+                    # Cargar keypoints
+                    keypoints = np.load(file_path)
+                    frames_data[global_frame][camera_id][detector_name] = keypoints
+        
+        # Procesar cada frame
+        results_3d = []
+        
+        for global_frame, cameras_data in frames_data.items():
+            if len(cameras_data) == current_session['cameras_count']:  # Todas las cámaras disponibles
+                
+                # Por simplicidad, usar el primer detector disponible
+                detector_names = set()
+                for cam_data in cameras_data.values():
+                    detector_names.update(cam_data.keys())
+                
+                if detector_names:
+                    primary_detector = list(detector_names)[0]
+                    
+                    # Extraer keypoints de todas las cámaras para este detector
+                    multi_camera_keypoints = {}
+                    for camera_id, cam_data in cameras_data.items():
+                        if primary_detector in cam_data:
+                            multi_camera_keypoints[camera_id] = cam_data[primary_detector]
+                    
+                    if len(multi_camera_keypoints) >= 2:  # Mínimo 2 cámaras para triangulación
+                        # Triangulación simple (placeholder)
+                        # TODO: Implementar triangulación real cuando tengamos calibración
+                        
+                        # Guardar resultado 3D en .json
+                        output_dir = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}" / "3D"
+                        output_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        result_3d_data = {
+                            'patient_id': patient_id,
+                            'session_id': session_id,
+                            'chunk_number': chunk_number,
+                            'global_frame': global_frame,
+                            'timestamp': global_frame / 30.0,  # Asumiendo 30 FPS para timestamp aproximado
+                            'detector_used': primary_detector,
+                            'cameras_used': list(multi_camera_keypoints.keys()),
+                            'num_cameras': len(multi_camera_keypoints),
+                            'triangulation_method': 'simple_placeholder',
+                            'points_3d_shape': [len(list(multi_camera_keypoints.values())[0]), 3],
+                            'status': 'placeholder_generated'
+                        }
+                        
+                        output_file = output_dir / f"frame_{global_frame}_3d.json"
+                        with open(output_file, 'w') as f:
+                            json.dump(result_3d_data, f, indent=2)
+                        
+                        processed_frames += 1
+                        results_3d.append(output_file)
+        
+        logger.info(f"💎 Triangulación completada: {processed_frames} frames procesados para chunk {chunk_number}")
+        return processed_frames > 0
+        
+    except Exception as e:
+        logger.error(f"Error en triangulación simple: {e}")
+        return False
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -241,8 +398,47 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
         
-        # TODO: Iniciar procesamiento asíncrono del chunk
-        # process_video_chunk.delay(str(file_path), patient_id, session_id, camera_id, chunk_number)
+        # Verificar si tenemos todos los chunks de todas las cámaras para este número
+        try:
+            session_base = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+            available_chunks = {}
+            
+            # Verificar chunks disponibles para este número de chunk
+            for cam_id in range(current_session['cameras_count']):
+                chunk_path = session_base / f"camera{cam_id}" / f"{chunk_number}.mp4"
+                if chunk_path.exists():
+                    available_chunks[cam_id] = chunk_path
+            
+            # Si tenemos todos los chunks, procesar inmediatamente
+            if len(available_chunks) == current_session['cameras_count']:
+                logger.info(f"🎬 Todos los chunks {chunk_number} disponibles, procesando inmediatamente...")
+                
+                # Inicializar coordinador si no está inicializado
+                if not processing_coordinator.is_initialized:
+                    if not processing_coordinator.initialize():
+                        logger.error("Error inicializando processing_coordinator")
+                        raise Exception("Processing coordinator initialization failed")
+                
+                # Procesar chunk sincronizado
+                result = processing_coordinator.process_chunk_videos(
+                    patient_id=patient_id,
+                    session_id=session_id,
+                    chunk_number=chunk_number,
+                    video_paths=available_chunks
+                )
+                
+                if result.success:
+                    logger.info(f"✅ Chunk {chunk_number} procesado: {result.total_frames} frames, "
+                               f"tiempo: {result.processing_time:.2f}s")
+                    
+                    # Verificar si podemos hacer reconstrucción 3D
+                    _check_and_trigger_3d_reconstruction(patient_id, session_id, chunk_number)
+                    
+                else:
+                    logger.error(f"❌ Error procesando chunk {chunk_number}: {result.errors}")
+                    
+        except Exception as processing_error:
+            logger.error(f"Error en procesamiento inmediato: {processing_error}")
         
         return jsonify({
             'status': 'chunk_received',
