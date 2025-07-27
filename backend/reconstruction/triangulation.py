@@ -1,12 +1,14 @@
 """
 Sistema de triangulación 3D para reconstrucción de keypoints
 Implementa múltiples métodos de triangulación con optimización
+Actualizado para usar la nueva estructura de archivos separados
 """
 import numpy as np
 import cv2
 from typing import List, Dict, Tuple, Optional, Any
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -385,24 +387,27 @@ class Triangulator:
             )
         
     def _load_frame_keypoints(self, patient_id: str, session_id: str, 
-                            global_frame: int) -> Dict[int, np.ndarray]:
+                            global_frame: int, detector_name: str = 'VitPose') -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
         """
-        Cargar keypoints 2D procesados de un frame
+        Cargar keypoints 2D y confianza de un frame usando nuevas funciones auxiliares
         
         Args:
             patient_id: ID del paciente
             session_id: ID de la sesión  
             global_frame: Número global del frame
+            detector_name: Detector a usar para triangulación
             
         Returns:
-            {camera_id: keypoints_2d}
+            {camera_id: (keypoints_2d, confidence)}
         """
         keypoints_dict = {}
         
         try:
+            # Importar funciones auxiliares
+            from backend.processing.utils import load_keypoints_2d_frame
             from config import data_config
             
-            session_dir = data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}"
+            session_dir = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}"
             
             if not session_dir.exists():
                 return keypoints_dict
@@ -410,20 +415,29 @@ class Triangulator:
             # Buscar en cada cámara
             for camera_dir in session_dir.iterdir():
                 if camera_dir.is_dir() and camera_dir.name.startswith('camera'):
-                    camera_id = int(camera_dir.name.replace('camera', ''))
-                    
-                    keypoints_file = camera_dir / f"{global_frame}.npy"
-                    
-                    if keypoints_file.exists():
-                        keypoints = np.load(keypoints_file)
-                        if len(keypoints) > 0:
-                            keypoints_dict[camera_id] = keypoints
+                    try:
+                        camera_id = int(camera_dir.name.replace('camera', ''))
+                        
+                        # Cargar keypoints y confianza usando función auxiliar
+                        keypoints, confidence = load_keypoints_2d_frame(
+                            detector_name=detector_name,
+                            camera_id=camera_id,
+                            global_frame=global_frame,
+                            patient_id=patient_id,
+                            session_id=session_id
+                        )
+                        
+                        if keypoints is not None and confidence is not None:
+                            keypoints_dict[camera_id] = (keypoints, confidence)
+                            
+                    except ValueError:
+                        continue
             
-            logger.debug(f"Keypoints cargados para frame {global_frame}: {list(keypoints_dict.keys())}")
+            logger.debug(f"Frame {global_frame}: keypoints de {len(keypoints_dict)} cámaras cargados")
             return keypoints_dict
             
         except Exception as e:
-            logger.error(f"Error cargando keypoints para frame {global_frame}: {e}")
+            logger.error(f"Error cargando keypoints frame {global_frame}: {e}")
             return {}
     
     
@@ -442,12 +456,12 @@ class Triangulator:
             Resultado de triangulación
         """
         try:
-            # Cargar keypoints 2D de todas las cámaras
-            keypoints_multi_camera = self._load_frame_keypoints(
+            # Cargar keypoints 2D de todas las cámaras (con confianza)
+            keypoints_with_confidence = self._load_frame_keypoints(
                 patient_id, session_id, global_frame
             )
             
-            if not keypoints_multi_camera:
+            if not keypoints_with_confidence:
                 return TriangulationResult(
                     points_3d=np.array([]),
                     reprojection_errors={},
@@ -456,6 +470,13 @@ class Triangulator:
                     processing_info={'error': f'No hay keypoints para frame {global_frame}'}
                 )
             
+            # Extraer solo keypoints para triangulación (manteniendo compatibilidad)
+            keypoints_multi_camera = {}
+            confidence_multi_camera = {}
+            for camera_id, (keypoints, confidence) in keypoints_with_confidence.items():
+                keypoints_multi_camera[camera_id] = keypoints
+                confidence_multi_camera[camera_id] = confidence
+            
             # Aplicar método de triangulación
             if method == 'dlt':
                 result = self.triangulate_dlt(keypoints_multi_camera)
@@ -463,6 +484,21 @@ class Triangulator:
                 result = self.triangulate_opencv(keypoints_multi_camera)
             else:
                 raise ValueError(f"Método no soportado: {method}")
+            
+            # Incorporar información de confianza en el resultado
+            if len(result.confidence_scores) == 0 and confidence_multi_camera:
+                # Calcular confianza promedio por keypoint desde todas las cámaras
+                avg_confidence = []
+                num_keypoints = len(result.points_3d) if len(result.points_3d) > 0 else 0
+                
+                for kp_idx in range(num_keypoints):
+                    confidences = []
+                    for camera_id in confidence_multi_camera:
+                        if kp_idx < len(confidence_multi_camera[camera_id]):
+                            confidences.append(confidence_multi_camera[camera_id][kp_idx])
+                    avg_confidence.append(np.mean(confidences) if confidences else 0.0)
+                
+                result.confidence_scores = np.array(avg_confidence)
             
             # Añadir información del frame
             result.processing_info.update({

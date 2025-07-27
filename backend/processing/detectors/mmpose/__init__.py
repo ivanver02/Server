@@ -1,10 +1,14 @@
 """
-Módulo MMPose para detectores de pose
+Detectores MMPose específicos
 """
-from .detector import MMPoseDetector
-from .manager import MMPoseManager
+from .vitpose_detector import VitPoseDetector
+from .hrnet_w48_detector import HRNetW48Detector
+from .wholebody_detector import WholeBodyDetector
+from .rtmpose_detector import RTMPoseDetector
 
 __all__ = [
-    'MMPoseDetector',
-    'MMPoseManager'
+    'VitPoseDetector',
+    'HRNetW48Detector',
+    'WholeBodyDetector',
+    'RTMPoseDetector'
 ]

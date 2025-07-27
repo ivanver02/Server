@@ -1,147 +1,63 @@
 """
-Interfaces base para detectores de pose escalables
+Interfaz base para detectores de pose
 """
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any, Union
-from pathlib import Path
+from typing import Dict, Any, Optional, Tuple
 import numpy as np
 import logging
-
-from ..data import KeypointResult, FrameResult
 
 logger = logging.getLogger(__name__)
 
 
 class BasePoseDetector(ABC):
     """
-    Interfaz base para todos los detectores de pose
-    Permite extender a diferentes frameworks (MMPose, MediaPipe, OpenPose, etc.)
+    Interfaz base para detectores de pose
+    Define las operaciones básicas que debe implementar cualquier detector
     """
     
-    def __init__(self, model_name: str, model_path: Optional[Path] = None):
-        self.model_name = model_name
-        self.model_path = model_path
+    def __init__(self, detector_name: str):
+        self.detector_name = detector_name
         self.is_initialized = False
-        
+    
+    @property
+    def name(self) -> str:
+        """Nombre del detector"""
+        return self.detector_name
+    
     @abstractmethod
     def initialize(self) -> bool:
-        """Inicializar el detector"""
+        """
+        Inicializar el detector con sus modelos y configuraciones
+        
+        Returns:
+            True si se inicializó correctamente
+        """
         pass
     
     @abstractmethod
-    def detect_frame(self, frame: np.ndarray) -> KeypointResult:
+    def detect_frame(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """
         Detectar keypoints en un frame individual
         
         Args:
-            frame: Frame de imagen (H, W, C)
+            frame: Frame de imagen como array numpy (H, W, C)
             
         Returns:
-            Resultado de la detección
+            Tuple (keypoints, scores) donde:
+            - keypoints: Array (N, 2) con coordenadas x,y de los keypoints
+            - scores: Array (N,) con confianzas [0-1] de cada keypoint
+            - Ambos son None si no se detecta ninguna persona
         """
         pass
     
-    @abstractmethod
-    def detect_batch(self, frames: List[np.ndarray]) -> List[KeypointResult]:
-        """
-        Detectar keypoints en un batch de frames
-        
-        Args:
-            frames: Lista de frames
-            
-        Returns:
-            Lista de resultados de detección
-        """
-        pass
-    
-    @abstractmethod
     def cleanup(self):
         """Limpiar recursos del detector"""
-        pass
+        self.is_initialized = False
+        logger.info(f"Detector {self.name} limpiado")
     
-    @abstractmethod
-    def get_model_info(self) -> Dict[str, Any]:
-        """Obtener información del modelo"""
-        pass
-    
-    def get_keypoint_names(self) -> List[str]:
-        """Obtener nombres de keypoints del modelo"""
-        return []
-    
-    def get_num_keypoints(self) -> int:
-        """Obtener número de keypoints del modelo"""
-        return len(self.get_keypoint_names())
-
-
-class BaseDetectorManager(ABC):
-    """
-    Manager base para gestionar múltiples detectores
-    """
-    
-    def __init__(self):
-        self.detectors: Dict[str, BasePoseDetector] = {}
-        self.active_models: List[str] = []
-    
-    @abstractmethod
-    def register_detector(self, detector: BasePoseDetector) -> bool:
-        """Registrar un nuevo detector"""
-        pass
-    
-    @abstractmethod
-    def initialize_all(self) -> bool:
-        """Inicializar todos los detectores registrados"""
-        pass
-    
-    def get_detector(self, model_name: str) -> Optional[BasePoseDetector]:
-        """Obtener detector por nombre"""
-        return self.detectors.get(model_name)
-    
-    def get_available_detectors(self) -> List[str]:
-        """Obtener lista de detectores disponibles"""
-        return list(self.detectors.keys())
-    
-    def get_active_detectors(self) -> List[str]:
-        """Obtener lista de detectores activos (inicializados)"""
-        return self.active_models
-    
-    def cleanup_all(self):
-        """Limpiar todos los detectores"""
-        for detector in self.detectors.values():
-            try:
-                detector.cleanup()
-            except Exception as e:
-                logger.error(f"Error limpiando detector {detector.model_name}: {e}")
-        
-        self.detectors.clear()
-        self.active_models.clear()
-
-
-class DetectorFactory:
-    """
-    Factory para crear detectores según el tipo
-    """
-    
-    @staticmethod
-    def create_detector(detector_type: str, model_name: str, 
-                       model_path: Optional[Path] = None) -> Optional[BasePoseDetector]:
-        """
-        Crear detector según el tipo
-        
-        Args:
-            detector_type: Tipo de detector ('mmpose', 'mediapipe', etc.)
-            model_name: Nombre del modelo
-            model_path: Ruta al modelo (opcional)
-            
-        Returns:
-            Instancia del detector o None si no es válido
-        """
-        if detector_type.lower() == 'mmpose':
-            from .mmpose.detector import MMPoseDetector
-            return MMPoseDetector(model_name, model_path)
-        # Aquí se pueden agregar otros tipos de detectores
-        # elif detector_type.lower() == 'mediapipe':
-        #     from .mediapipe.detector import MediaPipeDetector
-        #     return MediaPipeDetector(model_name, model_path)
-        
-        logger.error(f"Tipo de detector no soportado: {detector_type}")
-        return None
+    def get_status(self) -> Dict[str, Any]:
+        """Obtener estado del detector"""
+        return {
+            'name': self.name,
+            'is_initialized': self.is_initialized
+        }

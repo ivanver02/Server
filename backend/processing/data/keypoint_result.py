@@ -2,33 +2,19 @@
 Estructuras de datos para resultados de keypoints
 """
 import numpy as np
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
 
 @dataclass
-class KeypointResult:
-    """Resultado de la detección de keypoints en un frame"""
-    success: bool
-    keypoints: Optional[np.ndarray] = None  # (N, 2) coordenadas 2D
-    scores: Optional[np.ndarray] = None     # (N,) confianza por keypoint
-    bbox: Optional[np.ndarray] = None       # (4,) bounding box [x1,y1,x2,y2]
-    processing_time: float = 0.0
-    error_message: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self):
-        if self.metadata is None:
-            self.metadata = {}
-
-
-@dataclass
 class FrameResult:
-    """Resultado del procesamiento de un frame individual"""
+    """Resultado simplificado del procesamiento de un frame individual"""
     frame_number: int
     timestamp: float
     camera_id: int
-    keypoint_results: Dict[str, KeypointResult]  # {model_name: result}
+    frame_processed: bool = False  # Si se procesó el frame
+    detectors_used: List[str] = None  # Detectores que funcionaron
+    num_detections: int = 0  # Número de detecciones exitosas
     processing_time: float = 0.0
     success: bool = True
     errors: Optional[list] = None
@@ -36,6 +22,8 @@ class FrameResult:
     def __post_init__(self):
         if self.errors is None:
             self.errors = []
+        if self.detectors_used is None:
+            self.detectors_used = []
 
 
 @dataclass

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Importar configuraciones
 from config import server_config, data_config
 from backend.processing import processing_coordinator
+from backend.processing.pipeline import video_pipeline, initialize_pipeline
 from backend.reconstruction.triangulation import Triangulator
 from backend.reconstruction.calibration import calibration_system
 
@@ -401,14 +402,14 @@ def receive_chunk():
             if len(available_chunks) == current_session['cameras_count']:
                 logger.info(f"Todos los chunks {chunk_number} disponibles, procesando inmediatamente...")
                 
-                # Inicializar coordinador si no está inicializado
-                if not processing_coordinator.is_initialized:
-                    if not processing_coordinator.initialize():
-                        logger.error("Error inicializando processing_coordinator")
-                        raise Exception("Processing coordinator initialization failed")
+                # Inicializar pipeline si no está inicializado
+                if not video_pipeline.is_initialized:
+                    if not initialize_pipeline():
+                        logger.error("Error inicializando video_pipeline")
+                        raise Exception("Video pipeline initialization failed")
                 
-                # Procesar chunk sincronizado
-                result = processing_coordinator.process_chunk_videos(
+                # Procesar chunk sincronizado usando el pipeline
+                result = video_pipeline.process_chunk_synchronized(
                     patient_id=patient_id,
                     session_id=session_id,
                     chunk_number=chunk_number,
@@ -498,6 +499,34 @@ def recalibrate_cameras():
     except Exception as e:
         logger.error(f"Error en recalibración: {str(e)}")
         return jsonify({'error': f'Failed to recalibrate cameras: {str(e)}'}), 500
+
+@app.route('/api/pipeline/status', methods=['GET'])
+def get_pipeline_status():
+    """
+    Obtener estado completo del pipeline de procesamiento
+    """
+    try:
+        status = video_pipeline.get_processing_status()
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Error obteniendo estado del pipeline: {str(e)}")
+        return jsonify({'error': f'Failed to get pipeline status: {str(e)}'}), 500
+
+@app.route('/api/session/<patient_id>/<session_id>/analysis', methods=['GET'])
+def get_session_analysis(patient_id: str, session_id: str):
+    """
+    Obtener análisis completo de una sesión procesada
+    
+    Args:
+        patient_id: ID del paciente
+        session_id: ID de la sesión
+    """
+    try:
+        analysis = video_pipeline.get_session_analysis(patient_id, session_id)
+        return jsonify(analysis)
+    except Exception as e:
+        logger.error(f"Error obteniendo análisis de sesión: {str(e)}")
+        return jsonify({'error': f'Failed to get session analysis: {str(e)}'}), 500
 
 @app.errorhandler(413)
 def too_large(e):

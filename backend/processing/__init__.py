@@ -1,22 +1,25 @@
 """
-Módulo de procesamiento de video reestructurado y escalable
-Arquitectura modular para análisis de pose multi-cámara sincronizado
+Sistema de procesamiento de video para análisis de gonartrosis
+Arquitectura simplificada con detectores específicos
 """
 
 # Importar coordinador principal
 from .coordinator import ProcessingCoordinator, processing_coordinator
 
+# Importar pipeline principal
+from .pipeline import VideoProcessingPipeline, video_pipeline, initialize_pipeline, process_chunk
+
 # Importar estructuras de datos
 from .data import (
-    KeypointResult, FrameResult, SyncFrameResult,
+    FrameResult, SyncFrameResult,
     VideoProcessingResult, MultiCameraResult, ProcessingSessionResult,
     VideoInfo, SyncFrame, SyncConfig
 )
 
 # Importar detectores
 from .detectors import (
-    BasePoseDetector, BaseDetectorManager, DetectorFactory,
-    MMPoseDetector, MMPoseManager
+    BasePoseDetector,
+    VitPoseDetector, HRNetW48Detector, WholeBodyDetector, RTMPoseDetector
 )
 
 # Importar procesadores
@@ -28,13 +31,29 @@ from .synchronization import VideoSynchronizer, create_synchronizer_from_videos
 # Importar ensemble
 from .ensemble import EnsembleProcessor, EnsembleResult
 
+# Importar pipeline principal
+from .pipeline import VideoProcessingPipeline, video_pipeline, initialize_pipeline, get_pipeline_status
+
+# Importar utilidades
+from .utils import (
+    save_keypoints_2d_frame, load_keypoints_2d_frame,
+    get_available_frames, get_available_detectors,
+    get_session_summary
+)
+
+# Exportar todo
 __all__ = [
-    # Coordinador principal
+    # Coordinador
     'ProcessingCoordinator',
     'processing_coordinator',
     
-    # Estructuras de datos
-    'KeypointResult',
+    # Pipeline principal
+    'VideoProcessingPipeline',
+    'video_pipeline', 
+    'initialize_pipeline',
+    'process_chunk',
+    
+    # Datos
     'FrameResult', 
     'SyncFrameResult',
     'VideoProcessingResult',
@@ -44,12 +63,12 @@ __all__ = [
     'SyncFrame',
     'SyncConfig',
     
-    # Detectores
+    # Detectores específicos
     'BasePoseDetector',
-    'BaseDetectorManager',
-    'DetectorFactory',
-    'MMPoseDetector', 
-    'MMPoseManager',
+    'VitPoseDetector',
+    'HRNetW48Detector', 
+    'WholeBodyDetector',
+    'RTMPoseDetector',
     
     # Procesadores
     'MultiCameraProcessor',
@@ -60,10 +79,17 @@ __all__ = [
     
     # Ensemble learning
     'EnsembleProcessor',
-    'EnsembleResult'
+    'EnsembleResult',
+    
+    # Utilidades
+    'save_keypoints_2d_frame',
+    'load_keypoints_2d_frame',
+    'get_available_frames',
+    'get_available_detectors',
+    'get_session_summary'
 ]
 
 # Información del módulo
 __version__ = "2.0.0"
-__author__ = "Processing Team"
-__description__ = "Módulo escalable para procesamiento sincronizado de video multi-cámara con detección de pose"
+__author__ = "Gonartrosis Analysis Team"
+__description__ = "Sistema simplificado para procesamiento multi-cámara con detectores MMPose específicos"

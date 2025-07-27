@@ -13,7 +13,9 @@ from concurrent.futures import ThreadPoolExecutor
 from .data import (
     ProcessingSessionResult, MultiCameraResult, SyncConfig
 )
-from .detectors import MMPoseManager, DetectorFactory
+from .detectors import (
+    VitPoseDetector, HRNetW48Detector, WholeBodyDetector, RTMPoseDetector
+)
 from .processors import MultiCameraProcessor
 from .ensemble import EnsembleProcessor
 from .synchronization import create_synchronizer_from_videos
@@ -25,12 +27,18 @@ class ProcessingCoordinator:
     """
     Coordinador principal que orquesta todo el pipeline de procesamiento:
     1. Sincronización de videos multi-cámara
-    2. Detección de pose con múltiples modelos
+    2. Detección de pose con múltiples detectores MMPose
     3. Ensemble learning para fusión de resultados
     """
     
     def __init__(self):
-        self.detector_manager = MMPoseManager()
+        # Inicializar los cuatro detectores específicos
+        self.detectors = [
+            VitPoseDetector(),
+            HRNetW48Detector(),
+            WholeBodyDetector(),
+            RTMPoseDetector()
+        ]
         self.multi_camera_processor = MultiCameraProcessor()
         self.ensemble_processor = EnsembleProcessor()
         self.executor = ThreadPoolExecutor(max_workers=2)
@@ -47,18 +55,25 @@ class ProcessingCoordinator:
             logger.info("Inicializando ProcessingCoordinator...")
             
             # Inicializar detectores
-            if not self.detector_manager.initialize_all():
-                logger.error("Error inicializando detectores")
+            initialized_detectors = 0
+            for detector in self.detectors:
+                if detector.initialize():
+                    initialized_detectors += 1
+                    logger.info(f"Detector {detector.name} inicializado correctamente")
+                else:
+                    logger.error(f"Error inicializando detector {detector.name}")
+            
+            if initialized_detectors == 0:
+                logger.error("No se pudo inicializar ningún detector")
                 return False
             
-            # 4. Inicializar procesador multi-cámara
-            if not self.multi_camera_processor.initialize(self.detector_manager):
+            # Inicializar procesador multi-cámara
+            if not self.multi_camera_processor.initialize(self.detectors):
                 logger.error("Error inicializando procesador multi-cámara")
                 return False
             
             self.is_initialized = True
-            active_detectors = self.detector_manager.get_active_detectors()
-            logger.info(f"ProcessingCoordinator inicializado con {len(active_detectors)} detectores activos")
+            logger.info(f"ProcessingCoordinator inicializado con {initialized_detectors}/{len(self.detectors)} detectores activos")
             
             return True
             
@@ -127,21 +142,7 @@ class ProcessingCoordinator:
             if not result.success:
                 return result
             
-            # Guardar resultados de keypoints 2D
-            self._save_keypoints_2d(result)
-            
-            # Aplicar ensemble learning si hay múltiples detectores
-            active_detectors = self.detector_manager.get_active_detectors()
-            if len(active_detectors) > 1:
-                logger.info(f"🎯 Aplicando ensemble learning con {len(active_detectors)} detectores")
-                
-                ensemble_result = self._apply_ensemble_to_chunk(result)
-                if ensemble_result:
-                    # Actualizar resultado con información de ensemble
-                    result.sync_info['ensemble_applied'] = True
-                    result.sync_info['ensemble_result'] = ensemble_result
-                else:
-                    logger.warning("Error aplicando ensemble learning")
+            # Keypoints 2D ya se guardaron directamente en MultiCameraProcessor
             
             total_time = time.time() - start_time
             result.processing_time = total_time
@@ -221,87 +222,14 @@ class ProcessingCoordinator:
                     if keypoint_result.success and keypoint_result.keypoints is not None:
                         total += len(keypoint_result.keypoints)
         return total
-    
-    def _save_keypoints_2d(self, result: MultiCameraResult) -> List[str]:
-        """
-        Guardar keypoints 2D en formato .npy para triangulación rápida
-        
-        Args:
-            result: Resultado del procesamiento multi-cámara
-            
-        Returns:
-            Lista de rutas de archivos guardados
-        """
-        try:
-            from config import data_config
-            
-            saved_files = []
-            base_path = data_config.base_data_dir / f"patient{result.patient_id}" / f"session{result.session_id}"
-            
-            for sync_frame_result in result.sync_frame_results:
-                frame_number = sync_frame_result.frame_number
-                timestamp = sync_frame_result.timestamp
-                
-                for camera_id, frame_result in sync_frame_result.camera_results.items():
-                    # Crear directorio para esta cámara (estructura compatible con triangulador)
-                    camera_dir = base_path / f"camera{camera_id}"
-                    camera_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    # Guardar keypoints de cada detector por separado
-                    for detector_name, keypoint_result in frame_result.keypoint_results.items():
-                        if keypoint_result.success and keypoint_result.keypoints is not None:
-                            
-                            # Nombre de archivo compatible con triangulador
-                            # global_frame = chunk_number * frames_per_chunk + frame_number
-                            global_frame = result.chunk_number * 1000 + frame_number  # Asumiendo max 1000 frames por chunk
-                            
-                            # Guardar keypoints en .npy (para triangulación rápida)
-                            keypoints_file = camera_dir / f"{global_frame}_{detector_name}.npy"
-                            np.save(keypoints_file, keypoint_result.keypoints)
-                            saved_files.append(str(keypoints_file))
-                            
-                            # Guardar confianzas en .npy
-                            if keypoint_result.scores is not None:
-                                confidence_file = camera_dir / f"{global_frame}_{detector_name}_confidence.npy"
-                                np.save(confidence_file, keypoint_result.scores)
-                                saved_files.append(str(confidence_file))
-                            
-                            # Guardar metadata en .json (para debugging y análisis)
-                            metadata = {
-                                'patient_id': result.patient_id,
-                                'session_id': result.session_id,
-                                'chunk_number': result.chunk_number,
-                                'camera_id': camera_id,
-                                'frame_number': frame_number,
-                                'global_frame': global_frame,
-                                'timestamp': timestamp,
-                                'detector_name': detector_name,
-                                'keypoints_shape': keypoint_result.keypoints.shape,
-                                'num_keypoints': len(keypoint_result.keypoints),
-                                'bbox': keypoint_result.bbox.tolist() if keypoint_result.bbox is not None else None,
-                                'processing_time': keypoint_result.processing_time,
-                                'sync_quality': sync_frame_result.sync_quality,
-                                'metadata': keypoint_result.metadata or {}
-                            }
-                            
-                            metadata_file = camera_dir / f"{global_frame}_{detector_name}_metadata.json"
-                            with open(metadata_file, 'w') as f:
-                                json.dump(metadata, f, indent=2)
-                            saved_files.append(str(metadata_file))
-            
-            logger.info(f"💾 Guardados {len(saved_files)} archivos de keypoints 2D para chunk {result.chunk_number}")
-            return saved_files
-            
-        except Exception as e:
-            logger.error(f"Error guardando keypoints 2D: {e}")
-            return []
+
     
     
     def get_status(self) -> Dict[str, Any]:
         """Obtener estado completo del coordinador"""
         return {
             'is_initialized': self.is_initialized,
-            'detector_manager': self.detector_manager.get_status() if self.detector_manager else None,
+            'detectors': [detector.get_status() for detector in self.detectors],
             'multi_camera_processor': self.multi_camera_processor.get_status() if self.multi_camera_processor else None
         }
     
@@ -310,9 +238,9 @@ class ProcessingCoordinator:
         try:
             logger.info("🧹 Limpiando ProcessingCoordinator...")
             
-            # Limpiar componentes
-            if self.detector_manager:
-                self.detector_manager.cleanup_all()
+            # Limpiar detectores
+            for detector in self.detectors:
+                detector.cleanup()
             
             if self.multi_camera_processor:
                 self.multi_camera_processor.cleanup()
