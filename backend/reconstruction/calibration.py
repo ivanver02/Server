@@ -205,8 +205,8 @@ class CalibrationSystem:
             
             from config import data_config
             
-            # Buscar datos de keypoints 2D procesados
-            session_dir = data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}"
+            # Buscar datos de keypoints 2D procesados  
+            session_dir = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}"
             
             if not session_dir.exists():
                 return {'error': 'Sesión no encontrada o sin procesar'}

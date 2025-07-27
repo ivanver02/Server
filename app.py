@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from config import server_config, data_config
 from backend.processing import processing_coordinator
 from backend.reconstruction.triangulation import Triangulator
+from backend.reconstruction.calibration import calibration_system
 
 # Crear aplicación Flask
 app = Flask(__name__)
@@ -462,15 +463,50 @@ def recalibrate_cameras():
         if not current_session['is_active']:
             return jsonify({'error': 'No active session'}), 400
         
-        # TODO: Implementar recalibración de parámetros extrínsecos
-        # usando keypoints 2D de múltiples frames
+        patient_id = current_session['patient_id']
+        session_id = current_session['session_id']
         
-        logger.info("Iniciando recalibración de cámaras...")
+        logger.info(f"Iniciando recalibración de cámaras para sesión {patient_id}/{session_id}...")
         
-        return jsonify({
-            'status': 'recalibration_started',
-            'message': 'Camera extrinsic parameters recalibration initiated'
-        })
+        # Usar sistema de calibración para auto-calibrar usando keypoints de la sesión
+        calibration_result = calibration_system.auto_calibrate_extrinsics_from_session(
+            patient_id=patient_id,
+            session_id=session_id
+        )
+        
+        if 'error' in calibration_result:
+            logger.error(f"Error en auto-calibración: {calibration_result['error']}")
+            return jsonify({
+                'success': False,
+                'error': calibration_result['error']
+            }), 500
+        
+        if calibration_result.get('success', False):
+            logger.info(f"Recalibración exitosa: {calibration_result['calibrated_count']} cámaras calibradas")
+            
+            # Guardar calibración actualizada
+            try:
+                calibration_file = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}" / "calibration.npz"
+                calibration_file.parent.mkdir(parents=True, exist_ok=True)
+                calibration_system.save_calibration(str(calibration_file))
+                logger.info(f"Calibración guardada en: {calibration_file}")
+            except Exception as save_error:
+                logger.warning(f"Error guardando calibración: {save_error}")
+            
+            return jsonify({
+                'success': True,
+                'status': 'recalibration_completed',
+                'message': 'Camera extrinsic parameters recalibrated successfully',
+                'calibration_result': calibration_result
+            })
+        else:
+            logger.warning("Recalibración falló")
+            return jsonify({
+                'success': False,
+                'status': 'recalibration_failed',
+                'message': 'Camera recalibration failed',
+                'calibration_result': calibration_result
+            }), 400
         
     except Exception as e:
         logger.error(f"Error en recalibración: {str(e)}")
