@@ -17,15 +17,15 @@ Este documento describe el flujo completo de procesamiento en el servidor desde 
 **Descripción:** Verifica que existe una sesión de procesamiento activa antes de aceptar chunks.
 
 #### 1.3. Validación de archivo y metadatos
-**Archivo:** `app.py:351-371`
+**Archivo:** `app.py:355-375`
 **Descripción:** Valida que el archivo MP4 existe y que camera_id y chunk_number son válidos.
 
 #### 1.4. Guardado de archivo
-**Archivo:** `app.py:382-390`
+**Archivo:** `app.py:380-390`
 **Descripción:** Guarda el chunk MP4 en directorio estructurado por paciente/sesión/cámara.
 
 #### 1.5. Verificación de chunks sincronizados
-**Archivo:** `app.py:395-404`
+**Archivo:** `app.py:395-405`
 **Descripción:** Verifica si están disponibles todos los chunks del mismo número de todas las cámaras.
 
 ---
@@ -33,75 +33,79 @@ Este documento describe el flujo completo de procesamiento en el servidor desde 
 ### **FASE 2: PROCESAMIENTO INMEDIATO (Si todos los chunks están disponibles)**
 
 #### 2.1. Inicialización del coordinador
-**Archivo:** `app.py:408-413`
+**Archivo:** `app.py:410-420`
 **Descripción:** Inicializa el processing_coordinator que gestiona MMPose y ensemble learning.
 
 ##### 2.1.1. `processing_coordinator.initialize()`
-**Archivo:** `backend/processing/coordinator.py:52`
-**Descripción:** Inicializa MMPose wrapper y ensemble processor para procesamiento de video.
+**Archivo:** `backend/processing/coordinator.py:39`
+**Descripción:** Inicializa detector manager y multi-camera processor.
 
-##### 2.1.2. `mmpose_wrapper.initialize()`
-**Archivo:** `backend/processing/coordinator.py:66`
-**Descripción:** Carga todos los modelos MMPose configurados (COCO y Extended).
+##### 2.1.2. `detector_manager.initialize_all()`
+**Archivo:** `backend/processing/coordinator.py:60`
+**Descripción:** Carga todos los detectores MMPose configurados.
 
-##### 2.1.3. `ensemble_processor.initialize()`
-**Archivo:** `backend/processing/coordinator.py:73`
-**Descripción:** Inicializa sistema de ensemble learning para combinar resultados de múltiples modelos.
+##### 2.1.3. `multi_camera_processor.initialize()`
+**Archivo:** `backend/processing/coordinator.py:67`
+**Descripción:** Inicializa procesador multi-cámara con detector manager.
 
 #### 2.2. `processing_coordinator.process_chunk_videos()`
-**Archivo:** `backend/processing/coordinator.py:82` → `app.py:415`
+**Archivo:** `backend/processing/coordinator.py:85` → `app.py:420`
 **Descripción:** Procesa todos los videos del chunk desde todas las cámaras simultáneamente.
 
-##### 2.2.1. Creación de objetos Video
-**Archivo:** `backend/processing/coordinator.py:106`
-**Descripción:** Crea objetos Video individuales para cada archivo de cámara con metadatos completos.
+##### 2.2.1. `multi_camera_processor.process_synchronized_videos()`
+**Archivo:** `backend/processing/processors/multi_camera_processor.py:57`
+**Descripción:** Procesa múltiples videos sincronizados usando VideoSynchronizer.
 
-##### 2.2.2. `video.process_complete_pipeline()` (para cada cámara)
-**Archivo:** `backend/data/video.py:89`
-**Descripción:** Pipeline completo: extracción de frames → MMPose → ensemble → guardado de keypoints 2D.
+###### 2.2.1.1. `create_synchronizer_from_videos()`
+**Archivo:** `backend/processing/synchronization/video_sync.py:321`
+**Descripción:** Crea sincronizador de videos desde múltiples archivos de video.
 
-###### 2.2.2.1. `video.extract_all_frames()`
-**Archivo:** `backend/data/video.py:106`
-**Descripción:** Extrae todos los frames del video MP4 como imágenes temporales.
+###### 2.2.1.2. `synchronizer.initialize_sync()`
+**Archivo:** `backend/processing/synchronization/video_sync.py:88`
+**Descripción:** Inicializa sincronización calculando timestamps y metadatos.
 
-###### 2.2.2.2. `video.process_all_models()`
-**Archivo:** `backend/data/video.py:127`
-**Descripción:** Procesa cada frame con todos los modelos MMPose configurados.
+###### 2.2.1.3. `_process_synchronized_frames()`
+**Archivo:** `backend/processing/processors/multi_camera_processor.py:166`
+**Descripción:** Procesa frames sincronizados usando iterator de sincronización.
 
-####### 2.2.2.2.1. `inferencer.forward()` (para cada modelo)
-**Archivo:** `backend/data/video.py:134`
-**Descripción:** Ejecuta inferencia MMPose en cada frame con cada modelo individual.
+####### 2.2.1.3.1. `synchronizer.iterate_synchronized_frames()`
+**Archivo:** `backend/processing/synchronization/video_sync.py:200`
+**Descripción:** Itera sobre frames sincronizados de todas las cámaras.
 
-####### 2.2.2.2.2. `video._save_model_results()`
-**Archivo:** `backend/data/video.py:149`
-**Descripción:** Guarda keypoints 2D y confidence scores de cada modelo por separado.
+####### 2.2.1.3.2. `_process_frame_parallel()` (para cada frame)
+**Archivo:** `backend/processing/processors/multi_camera_processor.py:234`
+**Descripción:** Procesa frame individual con MMPose usando ThreadPoolExecutor.
 
-###### 2.2.2.3. `video.apply_ensemble_to_all_frames()`
-**Archivo:** `backend/data/video.py:170`
-**Descripción:** Aplica ensemble learning a todos los frames procesados.
+######## 2.2.1.3.2.1. `detector.detect_frame()` (para cada detector)
+**Archivo:** `backend/processing/detectors/mmpose/detector.py:106`
+**Descripción:** Ejecuta inferencia MMPose en frame individual con detector específico.
 
-####### 2.2.2.3.1. `ensemble_processor.process_frame_ensemble()`
-**Archivo:** `backend/processing/ensemble_processor.py:96`
-**Descripción:** Combina resultados de múltiples modelos usando weighted average y confidence filtering.
+######## 2.2.1.3.2.2. Guardado de keypoints 2D
+**Archivo:** Interno en `_process_frame_parallel`
+**Descripción:** Guarda keypoints 2D y confidence scores por detector en archivos .npy.
 
-####### 2.2.2.3.2. `ensemble_processor.save_ensemble_result()`
-**Archivo:** `backend/processing/ensemble_processor.py:145`
-**Descripción:** Guarda keypoints 2D finales del ensemble en formato numpy.
+#### 2.3. `_save_keypoints_2d()`
+**Archivo:** `backend/processing/coordinator.py:241`
+**Descripción:** Consolida y guarda resultados de keypoints 2D de todas las cámaras.
 
-###### 2.2.2.4. `video.cleanup_temp_images()`
-**Archivo:** `backend/data/video.py:191`
-**Descripción:** Limpia imágenes temporales extraídas del video.
+#### 2.4. `_apply_ensemble_to_chunk()` (Si hay múltiples detectores)
+**Archivo:** `backend/processing/coordinator.py:184`
+**Descripción:** Aplica ensemble learning combinando resultados de múltiples detectores.
 
-#### 2.3. Resultado de procesamiento por chunk
-**Archivo:** `backend/processing/coordinator.py:130`
-**Descripción:** Consolida resultados de todas las cámaras y retorna estadísticas completas.
+##### 2.4.1. `ensemble_processor.process_frame_ensemble()` (para cada frame)
+**Archivo:** `backend/processing/ensemble/ensemble_processor.py:244`
+**Descripción:** Combina keypoints de múltiples detectores usando weighted average.
+
+##### 2.4.2. `ensemble_processor.save_ensemble_result()`
+**Archivo:** `backend/processing/ensemble/ensemble_processor.py:322`
+**Descripción:** Guarda keypoints finales del ensemble en formato numpy.
 
 ---
 
 ### **FASE 3: VERIFICACIÓN PARA RECONSTRUCCIÓN 3D**
 
 #### 3.1. `_check_and_trigger_3d_reconstruction()`
-**Archivo:** `app.py:425` → `app.py:43`
+**Archivo:** `app.py:430` → `app.py:45`
 **Descripción:** Verifica si están disponibles keypoints 2D de todas las cámaras para triangulación.
 
 #### 3.2. Verificación de keypoints 2D disponibles
@@ -109,59 +113,59 @@ Este documento describe el flujo completo de procesamiento en el servidor desde 
 **Descripción:** Busca archivos .npy de keypoints en directorios de todas las cámaras.
 
 #### 3.3. `_triangulate_chunk_simple()` (Si todos los keypoints están disponibles)
-**Archivo:** `app.py:81`
-**Descripción:** Ejecuta triangulación estéreo para generar keypoints 3D.
+**Archivo:** `app.py:109`
+**Descripción:** Ejecuta triangulación simple para generar keypoints 3D (placeholder).
 
-##### 3.3.1. `Triangulator.triangulate_multiple_frames()`
-**Archivo:** `backend/reconstruction/triangulation.py:89`
-**Descripción:** Triangula keypoints de múltiples frames usando geometría estéreo.
+##### 3.3.1. Carga de keypoints por cámara
+**Archivo:** `app.py:115-140`
+**Descripción:** Carga archivos .npy de keypoints 2D de todas las cámaras.
 
-##### 3.3.2. Guardado de keypoints 3D
-**Archivo:** `app.py:143-162`
-**Descripción:** Guarda keypoints 3D finales en formato numpy en directorio estructurado.
+##### 3.3.2. Guardado de resultados 3D
+**Archivo:** `app.py:150-170`
+**Descripción:** Guarda resultados 3D en formato JSON (placeholder para triangulación real).
 
 ---
 
 ### **FASE 4: ENDPOINTS DE GESTIÓN DE SESIÓN**
 
 #### 4.1. `POST /api/session/start`
-**Archivo:** `app.py:206`
+**Archivo:** `app.py:208`
 **Descripción:** Inicia nueva sesión de procesamiento y crea estructura de directorios.
 
 ##### 4.1.1. Validación de parámetros
-**Archivo:** `app.py:222-234`
+**Archivo:** `app.py:220-235`
 **Descripción:** Valida patient_id, session_id y cameras_count requeridos.
 
 ##### 4.1.2. Creación de directorios
-**Archivo:** `app.py:240-256`
-**Descripción:** Crea estructura completa de directorios para la sesión (2D/points, 2D/confidence por modelo).
+**Archivo:** `app.py:245-260`
+**Descripción:** Crea estructura de directorios para cada cámara de la sesión.
 
 ##### 4.1.3. Activación de sesión global
-**Archivo:** `app.py:259-264`
+**Archivo:** `app.py:262-268`
 **Descripción:** Actualiza variable global current_session con información de la nueva sesión.
 
 #### 4.2. `POST /api/session/cancel`
-**Archivo:** `app.py:289`
+**Archivo:** `app.py:280`
 **Descripción:** Cancela sesión activa y limpia todos los archivos generados.
 
 ##### 4.2.1. Limpieza de directorios
-**Archivo:** `app.py:305-320`
-**Descripción:** Elimina directorios de datos sin procesar y procesados de la sesión cancelada.
+**Archivo:** `app.py:295-320`
+**Descripción:** Elimina directorios de datos de la sesión cancelada.
 
 ##### 4.2.2. Reset de sesión global
-**Archivo:** `app.py:324-330`
+**Archivo:** `app.py:322-330`
 **Descripción:** Reinicia variable global current_session a estado inactivo.
 
 #### 4.3. `POST /api/cameras/recalibrate`
-**Archivo:** `app.py:450`
+**Archivo:** `app.py:444`
 **Descripción:** Recalibra parámetros extrínsecos de cámaras usando keypoints de la sesión.
 
 ##### 4.3.1. `calibration_system.auto_calibrate_extrinsics_from_session()`
-**Archivo:** `backend/reconstruction/calibration.py:245`
+**Archivo:** `backend/reconstruction/calibration.py:192`
 **Descripción:** Auto-calibración usando keypoints 2D correspondientes entre cámaras.
 
 ##### 4.3.2. `calibration_system.save_calibration()`
-**Archivo:** `backend/reconstruction/calibration.py:198`
+**Archivo:** `backend/reconstruction/calibration.py:330`
 **Descripción:** Guarda parámetros de calibración actualizados en archivo .npz.
 
 ---
@@ -169,11 +173,11 @@ Este documento describe el flujo completo de procesamiento en el servidor desde 
 ### **FASE 5: ENDPOINTS DE ESTADO Y SALUD**
 
 #### 5.1. `GET /health`
-**Archivo:** `app.py:197`
+**Archivo:** `app.py:199`
 **Descripción:** Endpoint de verificación de salud del servidor.
 
 #### 5.2. `GET /api/session/status`
-**Archivo:** `app.py:279`
+**Archivo:** `app.py:272`
 **Descripción:** Retorna estado actual de la sesión de procesamiento.
 
 ---
