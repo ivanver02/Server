@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 from .coordinator import ProcessingCoordinator
-from .data import MultiCameraResult, SyncConfig
+from .data import MultiCameraResult
 from .utils import get_session_summary, get_available_frames, get_available_detectors
 
 logger = logging.getLogger(__name__)
@@ -78,8 +78,7 @@ class VideoProcessingPipeline:
                                  patient_id: str,
                                  session_id: str,
                                  chunk_number: int,
-                                 video_paths: Dict[int, Path],
-                                 sync_config: Optional[SyncConfig] = None) -> MultiCameraResult:
+                                 video_paths: Dict[int, Path]) -> MultiCameraResult:
         """
         Procesar un chunk completo con todas las cámaras
         
@@ -104,7 +103,6 @@ class VideoProcessingPipeline:
             session_id: ID de la sesión  
             chunk_number: Número del chunk
             video_paths: Dict {camera_id: video_path}
-            sync_config: Configuración opcional de sincronización
             
         Returns:
             Resultado del procesamiento multi-cámara
@@ -130,8 +128,7 @@ class VideoProcessingPipeline:
             patient_id=patient_id,
             session_id=session_id,
             chunk_number=chunk_number,
-            video_paths=video_paths,
-            sync_config=sync_config
+            video_paths=video_paths
         )
     
     def get_processing_status(self) -> Dict[str, Any]:
@@ -236,8 +233,7 @@ def initialize_pipeline() -> bool:
 def process_chunk(patient_id: str,
                  session_id: str, 
                  chunk_number: int,
-                 video_paths: Dict[int, Path],
-                 sync_config: Optional[SyncConfig] = None) -> MultiCameraResult:
+                 video_paths: Dict[int, Path]) -> MultiCameraResult:
     """
     Función helper para procesar un chunk usando el pipeline global
     
@@ -246,7 +242,6 @@ def process_chunk(patient_id: str,
         session_id: ID de la sesión
         chunk_number: Número del chunk  
         video_paths: Dict {camera_id: video_path}
-        sync_config: Configuración opcional de sincronización
         
     Returns:
         Resultado del procesamiento
@@ -255,8 +250,7 @@ def process_chunk(patient_id: str,
         patient_id=patient_id,
         session_id=session_id,
         chunk_number=chunk_number,
-        video_paths=video_paths,
-        sync_config=sync_config
+        video_paths=video_paths
     )
 
 

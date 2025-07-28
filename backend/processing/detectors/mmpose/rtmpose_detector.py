@@ -23,10 +23,8 @@ class RTMPoseDetector(BasePoseDetector):
     - Mayor precisión en rodillas, caderas y tobillos
     """
     
-    def __init__(self, config_path: Optional[str] = None, checkpoint_path: Optional[str] = None):
+    def __init__(self):
         super().__init__("rtmpose_l_coco_256x192")
-        self.config_path = config_path
-        self.checkpoint_path = checkpoint_path
         self.inferencer = None
         self.device = 'cuda' if self._is_cuda_available() else 'cpu'
     
@@ -48,14 +46,12 @@ class RTMPoseDetector(BasePoseDetector):
                 logger.error(f"MMPose no está instalado: {e}")
                 return False
             
-            # Usar configuración por defecto si no se proporciona
-            if not self.config_path or not self.checkpoint_path:
-                # Configuración por defecto para RTMPose Large
-                pose2d_config = "rtmpose-l_8xb256-420e_coco-256x192"
-                pose2d_weights = None  # MMPose descargará automáticamente
-            else:
-                pose2d_config = self.config_path
-                pose2d_weights = self.checkpoint_path
+            # Usar configuración centralizada
+            from config import mmpose_config
+            config = mmpose_config.rtmpose
+            
+            pose2d_config = config['config']
+            pose2d_weights = config['checkpoint']
             
             # Crear inferencer
             self.inferencer = MMPoseInferencer(
@@ -65,7 +61,7 @@ class RTMPoseDetector(BasePoseDetector):
             )
             
             self.is_initialized = True
-            logger.info(f"RTMPoseDetector inicializado en {self.device}")
+            logger.info(f"RTMPoseDetector inicializado en {self.device} con config: {pose2d_config}")
             return True
             
         except Exception as e:

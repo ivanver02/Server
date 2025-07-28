@@ -41,3 +41,22 @@ class SyncConfig:
     end_time: Optional[float] = None  # Tiempo final (None = hasta el final)
     sync_tolerance: float = 0.1  # Tolerancia de sincronización en segundos
     quality_threshold: float = 0.8  # Umbral mínimo de calidad de sync
+
+    def __post_init__(self):
+        """Aplicar configuración centralizada si no se especifican valores"""
+        try:
+            from config import synchronization_config
+            
+            # Solo aplicar valores por defecto si no se especificaron
+            if self.target_fps is None:
+                self.target_fps = synchronization_config.target_fps
+            if self.frame_interval == 1:  # Valor por defecto
+                self.frame_interval = synchronization_config.frame_interval
+            if self.sync_tolerance == 0.1:  # Valor por defecto
+                self.sync_tolerance = synchronization_config.sync_tolerance
+            if self.quality_threshold == 0.8:  # Valor por defecto
+                self.quality_threshold = synchronization_config.quality_threshold
+                
+        except ImportError:
+            # Si no se puede importar config, usar valores por defecto
+            pass

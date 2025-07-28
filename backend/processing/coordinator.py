@@ -11,7 +11,7 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
 from .data import (
-    ProcessingSessionResult, MultiCameraResult, SyncConfig
+    ProcessingSessionResult, MultiCameraResult
 )
 from .detectors import (
     VitPoseDetector, HRNetW48Detector, WholeBodyDetector, RTMPoseDetector
@@ -41,7 +41,10 @@ class ProcessingCoordinator:
         ]
         self.multi_camera_processor = MultiCameraProcessor()
         self.ensemble_processor = EnsembleProcessor()
-        self.executor = ThreadPoolExecutor(max_workers=2)
+        
+        # Usar configuración centralizada para max_workers
+        from config import processing_config
+        self.executor = ThreadPoolExecutor(max_workers=processing_config.max_workers)
         self.is_initialized = False
     
     def initialize(self) -> bool:
@@ -85,8 +88,7 @@ class ProcessingCoordinator:
                            patient_id: str,
                            session_id: str,
                            chunk_number: int,
-                           video_paths: Dict[int, Path],
-                           sync_config: Optional[SyncConfig] = None) -> MultiCameraResult:
+                           video_paths: Dict[int, Path]) -> MultiCameraResult:
         """
         Procesar chunk con múltiples videos sincronizados
         
@@ -95,7 +97,6 @@ class ProcessingCoordinator:
             session_id: ID de la sesión
             chunk_number: Número del chunk
             video_paths: Diccionario {camera_id: video_path}
-            sync_config: Configuración de sincronización
             
         Returns:
             Resultado del procesamiento del chunk
@@ -120,23 +121,12 @@ class ProcessingCoordinator:
                        f"Paciente: {patient_id}, Sesión: {session_id}")
             logger.info(f"Videos: {list(video_paths.keys())}")
             
-            # Usar configuración por defecto si no se proporciona
-            if sync_config is None:
-                from config import processing_config
-                sync_config = SyncConfig(
-                    target_fps=processing_config.target_fps,
-                    frame_interval=getattr(processing_config, 'frame_interval', 1),
-                    sync_tolerance=getattr(processing_config, 'sync_tolerance', 0.1),
-                    quality_threshold=getattr(processing_config, 'quality_threshold', 0.8)
-                )
-            
             # Procesar con multi-cámara
             result = self.multi_camera_processor.process_synchronized_videos(
                 video_paths=video_paths,
                 patient_id=patient_id,
                 session_id=session_id,
-                chunk_number=chunk_number,
-                sync_config=sync_config
+                chunk_number=chunk_number
             )
             
             if not result.success:

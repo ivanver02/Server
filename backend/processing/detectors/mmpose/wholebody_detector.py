@@ -24,10 +24,8 @@ class WholeBodyDetector(BasePoseDetector):
     Excelente para análisis detallado del tren inferior
     """
     
-    def __init__(self, config_path: Optional[str] = None, checkpoint_path: Optional[str] = None):
+    def __init__(self):
         super().__init__("wholebody_coco_133")
-        self.config_path = config_path
-        self.checkpoint_path = checkpoint_path
         self.inferencer = None
         self.device = 'cuda' if self._is_cuda_available() else 'cpu'
     
@@ -49,14 +47,12 @@ class WholeBodyDetector(BasePoseDetector):
                 logger.error(f"MMPose no está instalado: {e}")
                 return False
             
-            # Usar configuración por defecto si no se proporciona
-            if not self.config_path or not self.checkpoint_path:
-                # Configuración por defecto para WholeBody
-                pose2d_config = "td-hm_hrnet-w48_8xb32-210e_wholebody-384x288"
-                pose2d_weights = None  # MMPose descargará automáticamente
-            else:
-                pose2d_config = self.config_path
-                pose2d_weights = self.checkpoint_path
+            # Usar configuración centralizada
+            from config import mmpose_config
+            config = mmpose_config.wholebody
+            
+            pose2d_config = config['config']
+            pose2d_weights = config['checkpoint']
             
             # Crear inferencer
             self.inferencer = MMPoseInferencer(
@@ -66,7 +62,7 @@ class WholeBodyDetector(BasePoseDetector):
             )
             
             self.is_initialized = True
-            logger.info(f"WholeBodyDetector inicializado en {self.device}")
+            logger.info(f"WholeBodyDetector inicializado en {self.device} con config: {pose2d_config}")
             return True
             
         except Exception as e:

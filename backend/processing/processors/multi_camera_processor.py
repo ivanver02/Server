@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..data import (
     MultiCameraResult, SyncFrameResult, FrameResult,
-    SyncConfig, VideoInfo
+    VideoInfo
 )
 from ..detectors import BasePoseDetector
 from ..synchronization import VideoSynchronizer, create_synchronizer_from_videos
@@ -26,10 +26,12 @@ class MultiCameraProcessor:
     en múltiples cámaras simultáneamente, guardando directamente en archivos .npy
     """
     
-    def __init__(self, max_workers: int = 4):
+    def __init__(self):
+        # Usar configuración centralizada para max_workers
+        from config import processing_config
         self.detectors: List[BasePoseDetector] = []
-        self.max_workers = max_workers
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.max_workers = processing_config.max_workers
+        self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
         self.is_initialized = False
     
     def initialize(self, detectors: List[BasePoseDetector]) -> bool:
@@ -64,8 +66,7 @@ class MultiCameraProcessor:
                                   video_paths: Dict[int, Path],
                                   patient_id: str,
                                   session_id: str,
-                                  chunk_number: int,
-                                  sync_config: SyncConfig) -> MultiCameraResult:
+                                  chunk_number: int) -> MultiCameraResult:
         """
         Procesar múltiples videos sincronizados
         
@@ -74,7 +75,6 @@ class MultiCameraProcessor:
             patient_id: ID del paciente
             session_id: ID de la sesión
             chunk_number: Número del chunk
-            sync_config: Configuración de sincronización
             
         Returns:
             Resultado del procesamiento multi-cámara
@@ -99,8 +99,7 @@ class MultiCameraProcessor:
             
             # Crear sincronizador
             synchronizer = create_synchronizer_from_videos(
-                video_paths=video_paths,
-                sync_config=sync_config
+                video_paths=video_paths
             )
             
             if not synchronizer.initialize_sync():

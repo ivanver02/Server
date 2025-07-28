@@ -25,15 +25,29 @@ class DataConfig:
     """Configuración de directorios de datos"""
     base_data_dir: Path = BASE_DIR / "data"
     unprocessed_dir: Path = base_data_dir / "unprocessed"
+    processed_dir: Path = base_data_dir / "processed"
     
-    # Logs
+    # Directorios específicos de datos procesados
+    keypoints_2d_dir: Path = processed_dir / "2D_keypoints"
+    keypoints_3d_dir: Path = processed_dir / "3D_keypoints"
+    photos_dir: Path = processed_dir / "photos_from_video"
+    
+    # Directorio de logs
     logs_dir: Path = BASE_DIR / "logs"
+    
+    # Extensiones de archivos permitidas
+    video_extensions: List[str] = field(default_factory=lambda: ['.mp4', '.avi', '.mov', '.mkv'])
+    image_extensions: List[str] = field(default_factory=lambda: ['.jpg', '.jpeg', '.png', '.bmp'])
     
     def ensure_directories(self):
         """Crear todos los directorios necesarios"""
         dirs_to_create = [
             self.base_data_dir,
             self.unprocessed_dir,
+            self.processed_dir,
+            self.keypoints_2d_dir,
+            self.keypoints_3d_dir,
+            self.photos_dir,
             self.logs_dir
         ]
         
@@ -47,7 +61,36 @@ class MMPoseConfig:
     configs_dir: Path = models_dir / "configs"
     checkpoints_dir: Path = models_dir / "checkpoints"
     
-    # Configuraciones de modelos
+    # Configuraciones específicas de cada detector
+    hrnet_w48: Dict[str, str] = field(default_factory=lambda: {
+        'model_name': 'hrnet-w48_coco_256x192',
+        'config': 'hrnet-w48_coco_256x192',
+        'checkpoint': None,  # MMPose descargará automáticamente
+        'device': 'auto'  # auto detecta CUDA o CPU
+    })
+    
+    vitpose: Dict[str, str] = field(default_factory=lambda: {
+        'model_name': 'vitpose_huge_coco',
+        'config': 'vitpose-h-multi-coco',
+        'checkpoint': None,  # MMPose descargará automáticamente
+        'device': 'auto'
+    })
+    
+    rtmpose: Dict[str, str] = field(default_factory=lambda: {
+        'model_name': 'rtmpose_l_coco_256x192',
+        'config': 'rtmpose-l_8xb256-420e_coco-256x192',
+        'checkpoint': None,  # MMPose descargará automáticamente
+        'device': 'auto'
+    })
+    
+    wholebody: Dict[str, str] = field(default_factory=lambda: {
+        'model_name': 'wholebody_coco_133',
+        'config': 'td-hm_hrnet-w48_8xb32-210e_wholebody-384x288',
+        'checkpoint': None,  # MMPose descargará automáticamente
+        'device': 'auto'
+    })
+    
+    # Configuraciones de modelos legacy (mantener por compatibilidad)
     model_configs: Dict[str, Dict[str, str]] = None
     
     def __post_init__(self):
@@ -101,6 +144,24 @@ class ProcessingConfig:
     coco_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
     extended_models: List[str] = field(default_factory=lambda: [])
 
+
+@dataclass 
+class SynchronizationConfig:
+    """Configuración para sincronización de videos"""
+    # Configuración de sincronización temporal
+    target_fps: int = 15
+    frame_interval: int = 1  # Procesar cada N frames
+    sync_tolerance: float = 0.1  # Tolerancia de sincronización en segundos
+    quality_threshold: float = 0.8  # Umbral de calidad mínima
+    
+    # Configuración de extracción de frames
+    max_frame_diff: int = 5  # Máxima diferencia de frames entre cámaras
+    enable_frame_interpolation: bool = False  # Interpolación de frames faltantes
+    
+    # Configuración de validación
+    min_sync_duration: float = 1.0  # Duración mínima para considerar sincronización válida
+    max_sync_duration: float = 30.0  # Duración máxima de procesamiento
+
 @dataclass
 class ReconstructionConfig:
     """Configuración para reconstrucción 3D"""
@@ -119,6 +180,7 @@ class ReconstructionConfig:
 # Instancias globales de configuración
 server_config = ServerConfig()
 processing_config = ProcessingConfig()
+synchronization_config = SynchronizationConfig()
 reconstruction_config = ReconstructionConfig()
 data_config = DataConfig()
 mmpose_config = MMPoseConfig()

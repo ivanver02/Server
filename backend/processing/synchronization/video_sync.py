@@ -19,8 +19,8 @@ class VideoSynchronizer:
     en los mismos timestamps, manteniendo la sincronización temporal
     """
     
-    def __init__(self, config: Optional[SyncConfig] = None):
-        self.config = config or SyncConfig()
+    def __init__(self):
+        self.config = SyncConfig()
         self.video_captures: Dict[int, cv2.VideoCapture] = {}
         self.video_infos: Dict[int, VideoInfo] = {}
         self.sync_fps: Optional[float] = None
@@ -318,19 +318,17 @@ class VideoSynchronizer:
             logger.error(f"Error limpiando VideoSynchronizer: {e}")
 
 
-def create_synchronizer_from_videos(video_paths: Dict[int, Path], 
-                                   config: Optional[SyncConfig] = None) -> VideoSynchronizer:
+def create_synchronizer_from_videos(video_paths: Dict[int, Path]) -> VideoSynchronizer:
     """
     Crear sincronizador a partir de videos de múltiples cámaras
     
     Args:
         video_paths: Diccionario {camera_id: video_path}
-        config: Configuración de sincronización
         
     Returns:
         VideoSynchronizer configurado
     """
-    synchronizer = VideoSynchronizer(config)
+    synchronizer = VideoSynchronizer()
     
     logger.info(f"Creando sincronizador para {len(video_paths)} videos")
     
