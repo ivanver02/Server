@@ -64,8 +64,8 @@ class MMPoseConfig:
     # Configuraciones específicas de cada detector
     hrnet_w48: Dict[str, str] = field(default_factory=lambda: {
         'model_name': 'hrnet-w48_coco_256x192',
-        'config': 'hrnet-w48_coco_256x192',
-        'checkpoint': None,  # MMPose descargará automáticamente
+        'config': 'td-hm_hrnet-w48_8xb32-210e_coco-256x192.py',
+        'checkpoint': 'td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth',
         'device': 'auto'  # auto detecta CUDA o CPU
     })
     

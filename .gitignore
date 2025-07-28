@@ -105,6 +105,17 @@ work_dirs/
 .mmdet_cache/
 .cuda_cache/
 
+# Archivos temporales del proyecto
+*_con_keypoints.jpg
+*_with_keypoints.jpg
+*_processed.jpg
+*_output.jpg
+temp_*.jpg
+temp_*.png
+debug_*.jpg
+test_output_*
+atleta_con_keypoints.jpg
+
 # Calibración específica del setup
 config/camera_intrinsics_local.py
 calibration_data/
@@ -121,6 +132,42 @@ performance_logs/
 *.tar.gz
 *.rar
 *.7z
+
+# Modelos MMPose y checkpoints (archivos muy pesados)
+mmpose_models/checkpoints/*.pth
+mmpose_models/checkpoints/*.pt
+mmpose_models/checkpoints/*.ckpt
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# Cache de modelos descargados
+~/.cache/torch/
+~/.cache/mmcv/
+~/.cache/mmpose/
+.torch/
+torch_cache/
+
+# Datos grandes de entrenamiento/fine-tuning
+train_data/
+validation_data/
+pretrained_models/
+model_zoo/
+
+# Archivos de resultados grandes
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Videos de alta resolución y datasets
+dataset/
+datasets/
+raw_videos/
+high_res_videos/
 
 # Mantener estructura pero ignorar contenido
 data/unprocessed/.gitkeep
