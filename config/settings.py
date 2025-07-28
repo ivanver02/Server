@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).parent.parent
 @dataclass
 class ServerConfig:
     """Configuración del servidor Flask"""
-    host: str = '192.168.159.101'
+    host: str = '0.0.0.0'
     port: int = 5000
     debug: bool = True
     max_content_length: int = 100 * 1024 * 1024  # 100MB

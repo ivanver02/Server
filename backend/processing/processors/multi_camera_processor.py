@@ -29,7 +29,7 @@ class MultiCameraProcessor:
         # Usar configuración centralizada para max_workers
         from config import processing_config
         self.detectors: List[BasePoseDetector] = []
-        self.max_workers = processing_config.max_workers
+        self.max_workers = getattr(processing_config, 'max_workers', 4)
         self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
         self.is_initialized = False
     
