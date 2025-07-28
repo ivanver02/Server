@@ -24,7 +24,7 @@ class RTMPoseDetector(BasePoseDetector):
     """
     
     def __init__(self):
-        super().__init__("rtmpose_l_coco_256x192")
+        super().__init__("rtmpose")
         self.inferencer = None
         self.device = 'cuda' if self._is_cuda_available() else 'cpu'
     

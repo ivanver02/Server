@@ -47,14 +47,14 @@ class EnsembleProcessor:
             
         except Exception as e:
             logger.error(f"Error cargando configuración ensemble: {e}")
-            # Configuración por defecto
-            self.coco_models = ['hrnet_w48_coco', 'hrnet_w32_coco']
-            self.extended_models = ['resnet50_rle_coco', 'wholebody_coco']
+            # Configuración por defecto usando nombres modernos
+            self.coco_models = ['hrnet_w48', 'vitpose']
+            self.extended_models = ['resnet50_rle', 'wholebody']
             self.ensemble_weights = {
-                'hrnet_w48_coco': 0.6,
-                'hrnet_w32_coco': 0.4,
-                'resnet50_rle_coco': 1.0,
-                'wholebody_coco': 1.0
+                'hrnet_w48': 0.6,
+                'vitpose': 0.4,
+                'resnet50_rle': 1.0,
+                'wholebody': 1.0
             }
     
     def load_keypoints_for_frame(self, patient_id: str, session_id: str, 

@@ -1,7 +1,6 @@
 """
-Detector WholeBody - MMPose
-Implementación específica para el modelo WholeBody
-Incluye keypoints de cuerpo, manos y cara
+Detector ResNet-50 RLE - MMPose
+Implementación específica para el modelo ResNet-50 con RLE
 """
 import numpy as np
 from pathlib import Path
@@ -13,19 +12,14 @@ from ..base import BasePoseDetector
 logger = logging.getLogger(__name__)
 
 
-class WholeBodyDetector(BasePoseDetector):
+class ResNet50RLEDetector(BasePoseDetector):
     """
-    Detector específico para WholeBody de MMPose
-    Detecta keypoints de cuerpo completo (133 puntos):
-    - 17 puntos COCO (cuerpo)
-    - 6 puntos adicionales de pie
-    - 21 puntos por mano (42 total)
-    - 68 puntos faciales
-    Excelente para análisis detallado del tren inferior
+    Detector específico para ResNet-50 RLE de MMPose
+    Modelo ligero y rápido con buena precisión
     """
     
     def __init__(self):
-        super().__init__("wholebody")
+        super().__init__("resnet50_rle")
         self.inferencer = None
         self.device = 'cuda' if self._is_cuda_available() else 'cpu'
     
@@ -38,7 +32,7 @@ class WholeBodyDetector(BasePoseDetector):
             return False
     
     def initialize(self) -> bool:
-        """Inicializar el detector WholeBody"""
+        """Inicializar el detector ResNet-50 RLE"""
         try:
             # Importar MMPose
             try:
@@ -49,7 +43,7 @@ class WholeBodyDetector(BasePoseDetector):
             
             # Usar configuración centralizada
             from config import mmpose_config
-            config = mmpose_config.wholebody
+            config = mmpose_config.resnet50_rle
             
             pose2d_config = config['config']
             pose2d_weights = config['checkpoint']
@@ -62,17 +56,17 @@ class WholeBodyDetector(BasePoseDetector):
             )
             
             self.is_initialized = True
-            logger.info(f"WholeBodyDetector inicializado en {self.device} con config: {pose2d_config}")
+            logger.info(f"ResNet50RLEDetector inicializado en {self.device} con config: {pose2d_config}")
             return True
             
         except Exception as e:
-            logger.error(f"Error inicializando WholeBodyDetector: {e}")
+            logger.error(f"Error inicializando ResNet50RLEDetector: {e}")
             return False
     
     def detect_frame(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        """Detectar keypoints en un frame usando WholeBody"""
+        """Detectar keypoints en un frame usando ResNet-50 RLE"""
         if not self.is_initialized:
-            logger.warning("WholeBodyDetector no inicializado")
+            logger.warning("ResNet50RLEDetector no inicializado")
             return None, None
         
         try:
@@ -85,21 +79,32 @@ class WholeBodyDetector(BasePoseDetector):
                 
                 # Extraer keypoints y scores
                 if 'keypoints' in prediction:
-                    keypoints = np.array(prediction['keypoints'])  # Shape: (133, 2) o (133, 3)
+                    keypoints = np.array(prediction['keypoints'])  # Shape: (17, 2)
+                    scores = np.array(prediction.get('keypoint_scores', [1.0] * len(keypoints)))  # Shape: (17,)
                     
-                    # Extraer confidence scores
-                    if keypoints.shape[1] >= 3:
-                        scores = keypoints[:, 2]  # Confidence en tercera columna
-                        keypoints_2d = keypoints[:, :2]
-                    else:
-                        scores = np.ones(len(keypoints))  # Scores por defecto
-                        keypoints_2d = keypoints
+                    return keypoints, scores
                     
-                    return keypoints_2d, scores
-            
-            # No se detectaron personas
             return None, None
             
         except Exception as e:
-            logger.error(f"Error en inferencia WholeBody: {e}")
+            logger.error(f"Error en detección ResNet-50 RLE: {e}")
             return None, None
+    
+    def get_model_info(self) -> dict:
+        """Obtener información del modelo"""
+        return {
+            'name': 'ResNet-50 RLE',
+            'keypoints': 17,
+            'type': 'COCO 2D',
+            'device': self.device,
+            'framework': 'MMPose'
+        }
+    
+    def cleanup(self):
+        """Limpiar recursos del detector"""
+        if self.inferencer:
+            del self.inferencer
+            self.inferencer = None
+        
+        self.is_initialized = False
+        logger.info("ResNet50RLEDetector limpiado")

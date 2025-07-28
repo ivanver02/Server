@@ -19,7 +19,7 @@ class VitPoseDetector(BasePoseDetector):
     """
     
     def __init__(self):
-        super().__init__("vitpose_huge_coco")
+        super().__init__("vitpose")
         self.inferencer = None
         self.device = 'cuda' if self._is_cuda_available() else 'cpu'
     
