@@ -14,7 +14,7 @@ from .data import (
     ProcessingSessionResult, MultiCameraResult
 )
 from .detectors import (
-    VitPoseDetector, HRNetW48Detector, WholeBodyDetector, RTMPoseDetector
+    VitPoseDetector, HRNetW48Detector, WholeBodyDetector, RTMPoseDetector, ResNet50RLEDetector
 )
 from .processors import MultiCameraProcessor
 from .ensemble import EnsembleProcessor
@@ -32,12 +32,13 @@ class ProcessingCoordinator:
     """
     
     def __init__(self):
-        # Inicializar los cuatro detectores específicos
+        # Inicializar los cinco detectores específicos
         self.detectors = [
             VitPoseDetector(),
             HRNetW48Detector(),
             WholeBodyDetector(),
-            RTMPoseDetector()
+            RTMPoseDetector(),
+            ResNet50RLEDetector()
         ]
         self.multi_camera_processor = MultiCameraProcessor()
         self.ensemble_processor = EnsembleProcessor()
