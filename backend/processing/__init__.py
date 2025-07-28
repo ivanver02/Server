@@ -19,7 +19,7 @@ from .data import (
 # Importar detectores
 from .detectors import (
     BasePoseDetector,
-    VitPoseDetector, HRNetW48Detector, WholeBodyDetector, RTMPoseDetector
+    VitPoseDetector, HRNetW48Detector, WholeBodyDetector, RTMPoseDetector, ResNet50RLEDetector
 )
 
 # Importar procesadores
@@ -69,6 +69,7 @@ __all__ = [
     'HRNetW48Detector', 
     'WholeBodyDetector',
     'RTMPoseDetector',
+    'ResNet50RLEDetector',
     
     # Procesadores
     'MultiCameraProcessor',

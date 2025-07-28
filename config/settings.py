@@ -90,37 +90,28 @@ class MMPoseConfig:
         'device': 'auto'
     })
     
-    # Configuraciones de modelos legacy (mantener por compatibilidad)
-    model_configs: Dict[str, Dict[str, str]] = None
+    # Agregar modelo ResNet-50 que faltaba
+    resnet50_rle: Dict[str, str] = field(default_factory=lambda: {
+        'model_name': 'resnet50_rle_coco',
+        'config': 'td-hm_res50_rle-8xb64-210e_coco-256x192',
+        'checkpoint': None,  # MMPose descargará automáticamente
+        'device': 'auto'
+    })
     
-    def __post_init__(self):
-        if self.model_configs is None:
-            self.model_configs = {
-                'hrnet_w48_coco': {
-                    'config': 'configs/pose2d/td-hm_hrnet-w48_udp-8xb32-210e_coco-384x288.py',
-                    'checkpoint': 'checkpoints/td-hm_hrnet-w48_udp-8xb32-210e_coco-384x288.pth',
-                    'keypoints': 17,
-                    'gpu': 'cuda:0'
-                },
-                'vitpose_huge_coco': {
-                    'config': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192.py',
-                    'checkpoint': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192-e32adcd4_20230314.pth',
-                    'keypoints': 17,
-                    'gpu': 'cuda:0'
-                },
-                'resnet50_rle_coco': {
-                    'config': 'configs/pose2d/td-hm_res50_rle-8xb64-210e_coco-256x192.py',
-                    'checkpoint': 'checkpoints/td-hm_res50_rle-8xb64-210e_coco-256x192.pth',
-                    'keypoints': 17,
-                    'gpu': 'cuda:1'
-                },
-                'wholebody_coco': {
-                    'config': 'configs/pose2d/wholebody_2d_keypoint_topdown_coco-wholebody.py',
-                    'checkpoint': 'checkpoints/wholebody_2d_keypoint_topdown_coco-wholebody.pth',
-                    'keypoints': 133,  # 17 body + 6 feet + 42 hands + 68 face
-                    'gpu': 'cuda:1'
-                }
-            }
+    def get_model_config(self, model_name: str) -> Dict[str, str]:
+        """Obtener configuración de un modelo por nombre"""
+        model_mapping = {
+            'hrnet_w48_coco': self.hrnet_w48,
+            'hrnet_w48': self.hrnet_w48,
+            'vitpose_huge_coco': self.vitpose,
+            'vitpose': self.vitpose,
+            'rtmpose': self.rtmpose,
+            'resnet50_rle_coco': self.resnet50_rle,
+            'resnet50_rle': self.resnet50_rle,
+            'wholebody_coco': self.wholebody,
+            'wholebody': self.wholebody
+        }
+        return model_mapping.get(model_name, self.hrnet_w48)
     
     def ensure_directories(self):
         """Crear directorios para modelos"""
@@ -140,9 +131,9 @@ class ProcessingConfig:
     enable_parallel_processing: bool = True
     
     # Configuración de modelos por defecto
-    default_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
-    coco_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
-    extended_models: List[str] = field(default_factory=lambda: [])
+    default_models: List[str] = field(default_factory=lambda: ['hrnet_w48', 'vitpose'])
+    coco_models: List[str] = field(default_factory=lambda: ['hrnet_w48', 'vitpose'])
+    extended_models: List[str] = field(default_factory=lambda: ['resnet50_rle', 'wholebody'])
 
 
 @dataclass 
