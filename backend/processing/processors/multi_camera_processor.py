@@ -10,12 +10,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..data import (
     MultiCameraResult, SyncFrameResult, FrameResult,
-    VideoInfo
+    VideoInfo, SyncConfig
 )
 from ..detectors import BasePoseDetector
 from ..synchronization import VideoSynchronizer, create_synchronizer_from_videos
 from ..utils import save_keypoints_2d_frame, save_frame_metadata
-from ..utils import save_keypoints_2d
 
 logger = logging.getLogger(__name__)
 
