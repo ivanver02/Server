@@ -35,6 +35,9 @@ class DataConfig:
     # Directorio de logs
     logs_dir: Path = BASE_DIR / "logs"
     
+    # Directorio para videos anotados
+    annotated_videos_dir: Path = processed_dir / "annotated_videos"
+    
     # Extensiones de archivos permitidas
     video_extensions: List[str] = field(default_factory=lambda: ['.mp4', '.avi', '.mov', '.mkv'])
     image_extensions: List[str] = field(default_factory=lambda: ['.jpg', '.jpeg', '.png', '.bmp'])
@@ -48,7 +51,8 @@ class DataConfig:
             self.keypoints_2d_dir,
             self.keypoints_3d_dir,
             self.photos_dir,
-            self.logs_dir
+            self.logs_dir,
+            self.annotated_videos_dir
         ]
         
         for directory in dirs_to_create:
@@ -62,65 +66,29 @@ class MMPoseConfig:
     checkpoints_dir: Path = models_dir / "checkpoints"
     
     # Configuraciones específicas de cada detector
-    hrnet_w48: Dict[str, str] = field(default_factory=lambda: {
-        'model_name': 'hrnet-w48_coco_256x192',
-        'config': 'td-hm_hrnet-w48_8xb32-210e_coco-256x192.py',
-        'checkpoint': 'td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth',
-        'device': 'auto'  # auto detecta CUDA o CPU
-    })
-    
     vitpose: Dict[str, str] = field(default_factory=lambda: {
-        'model_name': 'vitpose_huge_coco',
-        'config': 'vitpose-h-multi-coco',
-        'checkpoint': None,  # MMPose descargará automáticamente
-        'device': 'auto'
+        'pose2d': 'configs/pose2d/td-hm_ViTPose-huge_8xb64-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/td-hm_ViTPose-huge_8xb64-210e_coco-256x192-e32adcd4_20230314.pth',
+        'device': 'cuda:0'
     })
     
-    rtmpose: Dict[str, str] = field(default_factory=lambda: {
-        'model_name': 'rtmpose_l_coco_256x192',
-        'config': 'rtmpose-l_8xb256-420e_coco-256x192',
-        'checkpoint': None,  # MMPose descargará automáticamente
-        'device': 'auto'
+    mspn: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/4xmspn50_coco_256x192-7b837afb_20201123.pth',
+        'device': 'cuda:0'
     })
     
-    wholebody: Dict[str, str] = field(default_factory=lambda: {
-        'model_name': 'wholebody_coco_133',
-        'config': 'td-hm_hrnet-w48_8xb32-210e_wholebody-384x288',
-        'checkpoint': None,  # MMPose descargará automáticamente
-        'device': 'auto'
+    hrnet: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'configs/pose2d/td-hm_hrnet-w48_8xb32-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth',
+        'device': 'cuda:0'
     })
     
-    # Configuraciones de modelos legacy (mantener por compatibilidad)
-    model_configs: Dict[str, Dict[str, str]] = None
-    
-    def __post_init__(self):
-        if self.model_configs is None:
-            self.model_configs = {
-                'hrnet_w48_coco': {
-                    'config': 'configs/pose2d/td-hm_hrnet-w48_udp-8xb32-210e_coco-384x288.py',
-                    'checkpoint': 'checkpoints/td-hm_hrnet-w48_udp-8xb32-210e_coco-384x288.pth',
-                    'keypoints': 17,
-                    'gpu': 'cuda:0'
-                },
-                'vitpose_huge_coco': {
-                    'config': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192.py',
-                    'checkpoint': 'td-hm_ViTPose-huge_8xb64-210e_coco-256x192-e32adcd4_20230314.pth',
-                    'keypoints': 17,
-                    'gpu': 'cuda:0'
-                },
-                'resnet50_rle_coco': {
-                    'config': 'configs/pose2d/td-hm_res50_rle-8xb64-210e_coco-256x192.py',
-                    'checkpoint': 'checkpoints/td-hm_res50_rle-8xb64-210e_coco-256x192.pth',
-                    'keypoints': 17,
-                    'gpu': 'cuda:1'
-                },
-                'wholebody_coco': {
-                    'config': 'configs/pose2d/wholebody_2d_keypoint_topdown_coco-wholebody.py',
-                    'checkpoint': 'checkpoints/wholebody_2d_keypoint_topdown_coco-wholebody.pth',
-                    'keypoints': 133,  # 17 body + 6 feet + 42 hands + 68 face
-                    'gpu': 'cuda:1'
-                }
-            }
+    csp: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'configs/pose2d/td-hm_cspnet-l_8xb64-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/cspnet-l_coco_256x192-1b50f8dc_20201123.pth',
+        'device': 'cuda:0'
+    })
     
     def ensure_directories(self):
         """Crear directorios para modelos"""
@@ -138,6 +106,9 @@ class ProcessingConfig:
     # Configuración de procesamiento paralelo
     max_workers: int = 4
     enable_parallel_processing: bool = True
+    
+    # Configuración de videos anotados
+    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
     
     # Configuración de modelos por defecto
     default_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])

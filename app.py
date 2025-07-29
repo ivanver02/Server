@@ -431,59 +431,37 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # COMENTAR ESTA DESPUÉS
-        return jsonify({'TodoBien': f'Se ha recibido'}), 200
-        '''
-        # Verificar si tenemos todos los chunks de todas las cámaras para este número
-        try:
-            session_base = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
-            available_chunks = {}
-            
-            # Verificar chunks disponibles para este número de chunk
-            for cam_id in range(current_session['cameras_count']):
-                chunk_path = session_base / f"camera{cam_id}" / f"{chunk_number}.mp4"
-                if chunk_path.exists():
-                    available_chunks[cam_id] = chunk_path
-            
-            # Si tenemos todos los chunks, procesar inmediatamente
-            if len(available_chunks) == current_session['cameras_count']:
-                logger.info(f"Todos los chunks {chunk_number} disponibles, procesando inmediatamente...")
-                
-                # Inicializar pipeline si no está inicializado
-                if not video_pipeline.is_initialized:
-                    if not initialize_pipeline():
-                        logger.error("Error inicializando video_pipeline")
-                        raise Exception("Video pipeline initialization failed")
-                
-                # Procesar chunk sincronizado usando el pipeline
-                result = video_pipeline.process_chunk_synchronized(
-                    patient_id=patient_id,
-                    session_id=session_id,
-                    chunk_number=chunk_number,
-                    video_paths=available_chunks
-                )
-                
-                if result.success:
-                    logger.info(f"Chunk {chunk_number} procesado: {result.total_frames} frames, "
-                               f"tiempo: {result.processing_time:.2f}s")
-                    
-                    # Verificar si podemos hacer reconstrucción 3D
-                    _check_and_trigger_3d_reconstruction(patient_id, session_id, chunk_number)
-                    
-                else:
-                    logger.error(f"Error procesando chunk {chunk_number}: {result.errors}")
-                    
-        except Exception as processing_error:
-            logger.error(f"Error en procesamiento inmediato: {processing_error}")
+        # Procesar chunk con detector VitPose (por ahora solo uno como ejemplo)
+        from backend.processing.detectors import VitPoseDetector
         
+        detector = VitPoseDetector()
+        if not detector.initialize():
+            logger.error("Error inicializando detector VitPose")
+            return jsonify({'error': 'Error initializing pose detector'}), 500
+        
+        # Procesar el chunk recibido
+        chunk_id = str(chunk_number)  # Usar chunk_number como chunk_id
+        success = detector.process_chunk(
+            video_path=file_path,
+            patient_id=patient_id,
+            session_id=session_id,
+            camera_id=camera_id,
+            chunk_id=chunk_id
+        )
+        
+        if success:
+            logger.info(f"Chunk {chunk_number} procesado exitosamente con VitPose")
+        else:
+            logger.error(f"Error procesando chunk {chunk_number} con VitPose")
+
         return jsonify({
-            'status': 'chunk_received',
+            'status': 'chunk_received_and_processed',
             'camera_id': camera_id,
             'chunk_number': chunk_number,
             'file_path': str(file_path),
-            'file_size': file_path.stat().st_size
+            'file_size': file_path.stat().st_size,
+            'processing_success': success
         })
-        '''
         
     except Exception as e:
         logger.error(f"Error recibiendo chunk: {str(e)}")
