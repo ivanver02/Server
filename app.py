@@ -430,7 +430,10 @@ def receive_chunk():
         file.save(str(file_path))
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
-        
+
+        # COMENTAR ESTA DESPUÉS
+        return jsonify({'TodoBien': f'Se ha recibido'}), 200
+        '''
         # Verificar si tenemos todos los chunks de todas las cámaras para este número
         try:
             session_base = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
@@ -480,6 +483,7 @@ def receive_chunk():
             'file_path': str(file_path),
             'file_size': file_path.stat().st_size
         })
+        '''
         
     except Exception as e:
         logger.error(f"Error recibiendo chunk: {str(e)}")

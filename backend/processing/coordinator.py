@@ -45,7 +45,7 @@ class ProcessingCoordinator:
         
         # Usar configuración centralizada para max_workers
         from config import processing_config
-        self.executor = ThreadPoolExecutor(max_workers=processing_config.max_workers)
+        self.executor = ThreadPoolExecutor(max_workers=getattr(processing_config, 'max_workers', 2))
         self.is_initialized = False
     
     def initialize(self) -> bool:

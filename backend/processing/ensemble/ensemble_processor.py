@@ -38,24 +38,23 @@ class EnsembleProcessor:
         try:
             from config import processing_config
             
-            self.coco_models = processing_config.coco_models
-            self.extended_models = processing_config.extended_models
-            self.ensemble_weights = processing_config.ensemble_weights
-            self.confidence_threshold = processing_config.confidence_threshold
+            # Cargar configuraciones disponibles de manera robusta
+            self.coco_models = getattr(processing_config, 'coco_models', ['VitPose', 'HRNet-W48'])
+            self.extended_models = getattr(processing_config, 'extended_models', ['WholeBody', 'RTMPose'])
+            self.ensemble_weights = getattr(processing_config, 'ensemble_weights', {})
+            self.confidence_threshold = getattr(processing_config, 'confidence_threshold', 0.3)
+            
+            # Si no hay ensemble_weights configurado, usar pesos iguales para todos los detectores
+            if not self.ensemble_weights:
+                all_models = self.coco_models + self.extended_models
+                self.ensemble_weights = {model: 1.0 / len(all_models) for model in all_models}
             
             logger.info(f"Ensemble configurado - COCO: {self.coco_models}, Extendidos: {self.extended_models}")
+            logger.info(f"Pesos ensemble: {self.ensemble_weights}")
             
         except Exception as e:
             logger.error(f"Error cargando configuración ensemble: {e}")
-            # Configuración por defecto usando nombres modernos
-            self.coco_models = ['hrnet_w48', 'vitpose']
-            self.extended_models = ['resnet50_rle', 'wholebody']
-            self.ensemble_weights = {
-                'hrnet_w48': 0.6,
-                'vitpose': 0.4,
-                'resnet50_rle': 1.0,
-                'wholebody': 1.0
-            }
+            raise
     
     def load_keypoints_for_frame(self, patient_id: str, session_id: str, 
                                 camera_id: int, global_frame: int) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
