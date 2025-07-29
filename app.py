@@ -230,15 +230,23 @@ def start_session():
         if not patient_id or not session_id:
             return jsonify({'error': 'patient_id and session_id are required'}), 400
         
-        # Verificar si ya hay una sesión activa
+        # Verificar si ya hay una sesión activa y finalizarla automáticamente
         if current_session['is_active']:
-            return jsonify({
-                'error': 'Session already active',
-                'current_session': {
-                    'patient_id': current_session['patient_id'],
-                    'session_id': current_session['session_id']
-                }
-            }), 409
+            logger.info(f"🔄 Sesión activa detectada, finalizando automáticamente: "
+                       f"patient{current_session['patient_id']}/session{current_session['session_id']}")
+            
+            # Finalizar sesión anterior automáticamente (sin eliminar datos)
+            old_patient_id = current_session['patient_id']
+            old_session_id = current_session['session_id']
+            
+            current_session.update({
+                'patient_id': None,
+                'session_id': None,
+                'is_active': False,
+                'cameras_count': 0
+            })
+            
+            logger.info(f"✅ Sesión anterior finalizada automáticamente: patient{old_patient_id}/session{old_session_id}")
         
         # Crear directorios para la nueva sesión
         session_dirs = []
@@ -332,6 +340,42 @@ def cancel_session():
     except Exception as e:
         logger.error(f"Error cancelando sesión: {str(e)}")
         return jsonify({'error': f'Failed to cancel session: {str(e)}'}), 500
+
+@app.route('/api/session/end', methods=['POST'])
+def end_session():
+    """
+    Finalizar sesión normalmente (mantener datos para procesamiento)
+    """
+    try:
+        if not current_session['is_active']:
+            return jsonify({'error': 'No active session to end'}), 400
+        
+        patient_id = current_session['patient_id']
+        session_id = current_session['session_id']
+        
+        # No eliminar datos, solo marcar sesión como finalizada
+        logger.info(f"Sesión finalizada normalmente - Paciente: {patient_id}, Sesión: {session_id}")
+        
+        old_session = current_session.copy()
+        current_session.update({
+            'patient_id': None,
+            'session_id': None,
+            'is_active': False,
+            'cameras_count': 0
+        })
+        
+        return jsonify({
+            'status': 'session_ended',
+            'ended_session': {
+                'patient_id': old_session['patient_id'],
+                'session_id': old_session['session_id']
+            },
+            'message': 'Session ended successfully, data preserved for processing'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error finalizando sesión: {str(e)}")
+        return jsonify({'error': f'Failed to end session: {str(e)}'}), 500
 
 @app.route('/api/chunks/receive', methods=['POST'])
 def receive_chunk():
