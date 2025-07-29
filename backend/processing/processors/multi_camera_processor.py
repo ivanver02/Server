@@ -94,7 +94,7 @@ class MultiCameraProcessor:
         start_time = time.time()
         
         try:
-            logger.info(f"🎬 Iniciando procesamiento sincronizado de {len(video_paths)} videos")
+            logger.info(f"Iniciando procesamiento sincronizado de {len(video_paths)} videos")
             
             # Crear sincronizador
             synchronizer = create_synchronizer_from_videos(
@@ -162,7 +162,7 @@ class MultiCameraProcessor:
         """
         sync_frame_results = []
         
-        logger.info(f"🔍 Procesando frames con {len(self.detectors)} detectores")
+        logger.info(f"Procesando frames con {len(self.detectors)} detectores")
         
         try:
             frame_count = 0

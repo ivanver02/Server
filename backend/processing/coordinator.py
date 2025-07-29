@@ -118,7 +118,7 @@ class ProcessingCoordinator:
         start_time = time.time()
         
         try:
-            logger.info(f"🎬 Procesando chunk {chunk_number} - "
+            logger.info(f"Procesando chunk {chunk_number} - "
                        f"Paciente: {patient_id}, Sesión: {session_id}")
             logger.info(f"Videos: {list(video_paths.keys())}")
             

@@ -59,7 +59,7 @@ class VideoProcessingPipeline:
             True si se inicializó correctamente
         """
         try:
-            logger.info("🚀 Inicializando pipeline de procesamiento de video...")
+            logger.info("Inicializando pipeline de procesamiento de video...")
             
             # Inicializar coordinador
             if not self.coordinator.initialize():
@@ -67,7 +67,7 @@ class VideoProcessingPipeline:
                 return False
             
             self.is_initialized = True
-            logger.info("✅ Pipeline inicializado correctamente")
+            logger.info("Pipeline inicializado correctamente")
             return True
             
         except Exception as e:
