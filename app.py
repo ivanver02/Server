@@ -437,36 +437,53 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # TODO: Procesamiento futuro con coordinator
-        # 
-        # # Inicializar coordinator si no está inicializado
-        # if not pose_coordinator.initialized:
-        #     logger.info("Inicializando coordinador de procesamiento de pose...")
-        #     if not pose_coordinator.initialize_all():
-        #         logger.error("Error inicializando coordinador de pose")
-        #         return jsonify({'error': 'Error initializing pose processing coordinator'}), 500
-        # 
-        # # Procesar chunk directamente con todos los detectores
-        # chunk_id = str(chunk_number)
-        # processing_results = pose_coordinator.process_chunk(
-        #     video_path=file_path,
-        #     patient_id=patient_id,
-        #     session_id=session_id,
-        #     camera_id=camera_id,
-        #     chunk_id=chunk_id
-        # )
-        # 
-        # success_count = sum(processing_results.values())
-        # logger.info(f"Chunk {chunk_number} procesado - {success_count}/{len(processing_results)} detectores exitosos")
+        # Inicializar coordinator al recibir el primer chunk
+        if not pose_coordinator.initialized:
+            logger.info("Inicializando coordinador de procesamiento de pose...")
+            if not pose_coordinator.initialize_all():
+                logger.error("Error inicializando coordinador de pose")
+                return jsonify({'error': 'Error initializing pose processing coordinator'}), 500
+        
+        # Solo procesar si es chunk 0 de cámara 0
+        processing_results = None
+        if camera_id == 0 and chunk_number == 0:
+            logger.info(f"Procesando chunk especial: cámara {camera_id}, chunk {chunk_number}")
+            
+            # Procesar chunk directamente con todos los detectores
+            chunk_id = str(chunk_number)
+            processing_results = pose_coordinator.process_chunk(
+                video_path=file_path,
+                patient_id=patient_id,
+                session_id=session_id,
+                camera_id=camera_id,
+                chunk_id=chunk_id
+            )
+            
+            success_count = sum(processing_results.values())
+            logger.info(f"Chunk {chunk_number} procesado - {success_count}/{len(processing_results)} detectores exitosos")
+        else:
+            logger.info(f"Chunk guardado sin procesar: cámara {camera_id}, chunk {chunk_number}")
 
-        return jsonify({
+        response_data = {
             'status': 'chunk_received',
             'camera_id': camera_id,
             'chunk_number': chunk_number,
             'file_path': str(file_path),
             'file_size': file_path.stat().st_size,
             'message': 'Chunk saved successfully'
-        })
+        }
+        
+        # Agregar información de procesamiento si se procesó
+        if processing_results is not None:
+            response_data['processing_results'] = processing_results
+            response_data['processed'] = True
+            response_data['successful_detectors'] = sum(processing_results.values())
+            response_data['total_detectors'] = len(processing_results)
+        else:
+            response_data['processed'] = False
+            response_data['reason'] = 'Only camera 0, chunk 0 gets processed'
+        
+        return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Error recibiendo chunk: {str(e)}")
