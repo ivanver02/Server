@@ -457,30 +457,27 @@ def receive_chunk():
                 else:
                     logger.info("Coordinador inicializado correctamente con al menos un detector")
         
-        # Solo procesar si es chunk 0 de cualquier cámara
+        # Procesar todos los chunks de todas las cámaras
         processing_results = None
-        if chunk_number == 0:
-            logger.info(f"🎯 Procesando chunk especial: chunk {chunk_number} de cámara {camera_id}")
+        logger.info(f"🎯 Procesando chunk {chunk_number} de cámara {camera_id}")
+        
+        # Usar lock para procesar un chunk a la vez
+        with processing_lock:
+            logger.info(f"🔒 Iniciando procesamiento exclusivo de chunk {chunk_number} cámara {camera_id}")
             
-            # Usar lock para procesar un chunk a la vez
-            with processing_lock:
-                logger.info(f"🔒 Iniciando procesamiento exclusivo de chunk {chunk_number} cámara {camera_id}")
-                
-                # Procesar chunk directamente con todos los detectores
-                chunk_id = str(chunk_number)
-                processing_results = pose_coordinator.process_chunk(
-                    video_path=file_path,
-                    patient_id=patient_id,
-                    session_id=session_id,
-                    camera_id=camera_id,
-                    chunk_id=chunk_id
-                )
-                
-                success_count = sum(processing_results.values())
-                logger.info(f"✅ Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
-                logger.info(f"🔓 Procesamiento exclusivo completado para chunk {chunk_number} cámara {camera_id}")
-        else:
-            logger.info(f"💾 Chunk guardado sin procesar: cámara {camera_id}, chunk {chunk_number} (solo chunk 0 se procesa)")
+            # Procesar chunk directamente con todos los detectores
+            chunk_id = str(chunk_number)
+            processing_results = pose_coordinator.process_chunk(
+                video_path=file_path,
+                patient_id=patient_id,
+                session_id=session_id,
+                camera_id=camera_id,
+                chunk_id=chunk_id
+            )
+            
+            success_count = sum(processing_results.values())
+            logger.info(f"✅ Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
+            logger.info(f"🔓 Procesamiento exclusivo completado para chunk {chunk_number} cámara {camera_id}")
 
         response_data = {
             'status': 'chunk_received',
@@ -491,15 +488,11 @@ def receive_chunk():
             'message': 'Chunk saved successfully'
         }
         
-        # Agregar información de procesamiento si se procesó
-        if processing_results is not None:
-            response_data['processing_results'] = processing_results
-            response_data['processed'] = True
-            response_data['successful_detectors'] = sum(processing_results.values())
-            response_data['total_detectors'] = len(processing_results)
-        else:
-            response_data['processed'] = False
-            response_data['reason'] = 'Only chunk 0 gets processed'
+        # Agregar información de procesamiento
+        response_data['processing_results'] = processing_results
+        response_data['processed'] = True
+        response_data['successful_detectors'] = sum(processing_results.values())
+        response_data['total_detectors'] = len(processing_results)
         
         return jsonify(response_data)
         
