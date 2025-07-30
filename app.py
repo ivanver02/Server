@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Importar configuraciones
 from config import server_config, data_config
+from backend.processing.coordinator import PoseProcessingCoordinator
 from backend.processing import processing_coordinator
 from backend.processing.pipeline import video_pipeline, initialize_pipeline
 from backend.reconstruction.triangulation import Triangulator
@@ -34,6 +35,9 @@ app.config['UPLOAD_FOLDER'] = server_config.upload_folder
 
 # Inicializar directorios
 data_config.ensure_directories()
+
+# Inicializar coordinador de procesamiento
+pose_coordinator = PoseProcessingCoordinator()
 
 # Variable global para sesión actual
 current_session = {
@@ -431,17 +435,16 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # Procesar chunk con detector VitPose (por ahora solo uno como ejemplo)
-        from backend.processing.detectors import VitPoseDetector
+        # Inicializar coordinator si no está inicializado
+        if not pose_coordinator.initialized:
+            logger.info("Inicializando coordinador de procesamiento de pose...")
+            if not pose_coordinator.initialize_all():
+                logger.error("Error inicializando coordinador de pose")
+                return jsonify({'error': 'Error initializing pose processing coordinator'}), 500
         
-        detector = VitPoseDetector()
-        if not detector.initialize():
-            logger.error("Error inicializando detector VitPose")
-            return jsonify({'error': 'Error initializing pose detector'}), 500
-        
-        # Procesar el chunk recibido
+        # Procesar el chunk con todos los detectores
         chunk_id = str(chunk_number)  # Usar chunk_number como chunk_id
-        success = detector.process_chunk(
+        processing_results = pose_coordinator.process_chunk(
             video_path=file_path,
             patient_id=patient_id,
             session_id=session_id,
@@ -449,10 +452,14 @@ def receive_chunk():
             chunk_id=chunk_id
         )
         
-        if success:
-            logger.info(f"Chunk {chunk_number} procesado exitosamente con VitPose")
-        else:
-            logger.error(f"Error procesando chunk {chunk_number} con VitPose")
+        # Evaluar resultados
+        successful_detectors = [name for name, success in processing_results.items() if success]
+        failed_detectors = [name for name, success in processing_results.items() if not success]
+        
+        if successful_detectors:
+            logger.info(f"Chunk {chunk_number} procesado exitosamente con: {', '.join(successful_detectors)}")
+        if failed_detectors:
+            logger.warning(f"Chunk {chunk_number} falló con: {', '.join(failed_detectors)}")
 
         return jsonify({
             'status': 'chunk_received_and_processed',
@@ -460,7 +467,9 @@ def receive_chunk():
             'chunk_number': chunk_number,
             'file_path': str(file_path),
             'file_size': file_path.stat().st_size,
-            'processing_success': success
+            'processing_results': processing_results,
+            'successful_detectors': successful_detectors,
+            'failed_detectors': failed_detectors
         })
         
     except Exception as e:

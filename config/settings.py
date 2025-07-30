@@ -2,9 +2,8 @@
 Configuración general del sistema de procesamiento de video
 Sistema de análisis de marcha para detección de gonartrosis
 """
-import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict
 from pathlib import Path
 
 # Directorio base del proyecto
@@ -37,10 +36,6 @@ class DataConfig:
     
     # Directorio para videos anotados
     annotated_videos_dir: Path = processed_dir / "annotated_videos"
-    
-    # Extensiones de archivos permitidas
-    video_extensions: List[str] = field(default_factory=lambda: ['.mp4', '.avi', '.mov', '.mkv'])
-    image_extensions: List[str] = field(default_factory=lambda: ['.jpg', '.jpeg', '.png', '.bmp'])
     
     def ensure_directories(self):
         """Crear todos los directorios necesarios"""
@@ -99,60 +94,12 @@ class MMPoseConfig:
 @dataclass
 class ProcessingConfig:
     """Configuración para procesamiento de video"""
-    # Configuración de extracción de frames
-    target_fps: int = 15
-    max_frames_per_chunk: int = 100
-    
-    # Configuración de procesamiento paralelo
-    max_workers: int = 4
-    enable_parallel_processing: bool = True
-    
     # Configuración de videos anotados
-    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
-    
-    # Configuración de modelos por defecto
-    default_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
-    coco_models: List[str] = field(default_factory=lambda: ['hrnet_w48_coco', 'vitpose_huge_coco'])
-    extended_models: List[str] = field(default_factory=lambda: [])
-
-
-@dataclass 
-class SynchronizationConfig:
-    """Configuración para sincronización de videos"""
-    # Configuración de sincronización temporal
-    target_fps: int = 15
-    frame_interval: int = 1  # Procesar cada N frames
-    sync_tolerance: float = 0.1  # Tolerancia de sincronización en segundos
-    quality_threshold: float = 0.8  # Umbral de calidad mínima
-    
-    # Configuración de extracción de frames
-    max_frame_diff: int = 5  # Máxima diferencia de frames entre cámaras
-    enable_frame_interpolation: bool = False  # Interpolación de frames faltantes
-    
-    # Configuración de validación
-    min_sync_duration: float = 1.0  # Duración mínima para considerar sincronización válida
-    max_sync_duration: float = 30.0  # Duración máxima de procesamiento
-
-@dataclass
-class ReconstructionConfig:
-    """Configuración para reconstrucción 3D"""
-    # Configuración de calibración
-    min_cameras_for_triangulation: int = 2
-    max_reprojection_error: float = 2.0
-    
-    # Configuración de triangulación
-    min_confidence_score: float = 0.3
-    use_opencv_triangulation: bool = True
-    
-    # Configuración de suavizado
-    enable_temporal_smoothing: bool = True
-    smoothing_window_size: int = 5
+    save_annotated_videos: bool = True  # Si guardar videos con keypoints dibujados
 
 # Instancias globales de configuración
 server_config = ServerConfig()
 processing_config = ProcessingConfig()
-synchronization_config = SynchronizationConfig()
-reconstruction_config = ReconstructionConfig()
 data_config = DataConfig()
 mmpose_config = MMPoseConfig()
 
