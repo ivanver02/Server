@@ -73,6 +73,8 @@ class PoseProcessingCoordinator:
         for detector in self.detectors:
             if detector.is_initialized:
                 try:
+                    logger.info(f"🔍 Analizando chunk {chunk_id} de cámara {camera_id} con detector {detector.model_name}")
+                    
                     success = detector.process_chunk(
                         video_path=video_path,
                         patient_id=patient_id,
@@ -83,18 +85,18 @@ class PoseProcessingCoordinator:
                     results[detector.model_name] = success
                     
                     if success:
-                        logger.info(f"Chunk {chunk_id} processed successfully with {detector.model_name}")
+                        logger.info(f"✅ Chunk {chunk_id} cámara {camera_id} procesado exitosamente con {detector.model_name}")
                     else:
-                        logger.warning(f"Failed to process chunk {chunk_id} with {detector.model_name}")
+                        logger.warning(f"❌ Falló el procesamiento del chunk {chunk_id} cámara {camera_id} con {detector.model_name}")
                         
                 except Exception as e:
-                    logger.error(f"Error processing chunk {chunk_id} with {detector.model_name}: {e}")
+                    logger.error(f"💥 Error procesando chunk {chunk_id} cámara {camera_id} con {detector.model_name}: {e}")
                     results[detector.model_name] = False
             else:
-                logger.debug(f"Skipping {detector.model_name} - not initialized")
+                logger.debug(f"⏭️  Saltando {detector.model_name} - no inicializado")
                 results[detector.model_name] = False
         
         success_count = sum(results.values())
-        logger.info(f"Chunk {chunk_id} processing completed: {success_count}/{len(results)} detectors succeeded")
+        logger.info(f"🎬 Chunk {chunk_id} cámara {camera_id} procesamiento completado: {success_count}/{len(results)} detectores exitosos")
         
         return results
