@@ -20,10 +20,6 @@ logger = logging.getLogger(__name__)
 # Importar configuraciones
 from config import server_config, data_config
 from backend.processing.coordinator import PoseProcessingCoordinator
-from backend.processing import processing_coordinator
-from backend.processing.pipeline import video_pipeline, initialize_pipeline
-from backend.reconstruction.triangulation import Triangulator
-from backend.reconstruction.calibration import calibration_system
 
 # Crear aplicación Flask
 app = Flask(__name__)
