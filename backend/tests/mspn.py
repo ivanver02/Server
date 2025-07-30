@@ -39,8 +39,8 @@ result_generator = inferencer(
 # 4. Procesar resultados
 results = next(result_generator)
 
-# print(f"\n KEYPOINTS: {results['predictions'][0][0]['keypoints']}")
-# print(f"\n CONFIDENCE: {results['predictions'][0][0]['keypoint_scores']}")
+print(f"\n KEYPOINTS: {np.array(results['predictions'][0][0]['keypoints']).shape}")
+print(f"\n CONFIDENCE: {np.array(results['predictions'][0][0]['keypoint_scores']).shape}")
 
 img_bgr = cv2.imread(input_image)  # Asegúrate de cambiar esta ruta si es diferente
 img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
