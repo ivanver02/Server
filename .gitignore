@@ -38,6 +38,12 @@ venv.bak/
 *.swo
 *~
 
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*-checkpoint.py
+*-checkpoint.ipynb
+*-checkpoint.*
+
 # OS
 .DS_Store
 .DS_Store?
