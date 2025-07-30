@@ -7,7 +7,8 @@ import os
 from pathlib import Path
 from typing import List, Dict, Any
 
-from .detectors import VitPoseDetector, MSPNDetector, HRNetDetector, CSPDetector
+from .detectors import VitPoseDetector, HRNetDetector, CSPDetector
+# from .detectors import MSPNDetector  # Comentado - no usar MSPN
 from config.settings import gpu_config
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class PoseProcessingCoordinator:
         """Inicializar coordinador con todos los detectores disponibles"""
         self.detectors = [
             VitPoseDetector(),
-            MSPNDetector(), 
+            # MSPNDetector(),  # Comentado - no ejecutar MSPN
             HRNetDetector(),
             CSPDetector()
         ]
