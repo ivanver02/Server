@@ -125,7 +125,7 @@ class MMPoseConfig:
 class ProcessingConfig:
     """Configuración para procesamiento de video"""
     # Configuración de videos anotados
-    save_annotated_videos: bool = True  # Si guardar videos con keypoints dibujados
+    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
 
 # Instancias globales de configuración
 server_config = ServerConfig()
