@@ -1,164 +1,53 @@
 """
 Detector CSP para análisis de pose
 """
-import os
-import numpy as np
-from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
-import logging
-
-from mmpose.apis import MMPoseInferencer
-from config import mmpose_config, data_config, processing_config
-
-logger = logging.getLogger(__name__)
+from .base import BasePoseDetector
 
 
-class CSPDetector:
+class CSPDetector(BasePoseDetector):
     """
     Detector de pose utilizando CSP (Cross Stage Partial Network)
     """
     
-    # Orden de keypoints COCO (17 keypoints)
-    JOINT_NAMES = [
-        "nose", "left_eye", "right_eye", "left_ear", "right_ear",
-        "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
-        "left_wrist", "right_wrist", "left_hip", "right_hip",
-        "left_knee", "right_knee", "left_ankle", "right_ankle"
-    ]
-    
     def __init__(self):
-        self.inferencer: Optional[MMPoseInferencer] = None
-        self.config = mmpose_config.csp
-        self.is_initialized = False
-        
-    def initialize(self) -> bool:
-        """
-        Inicializar el detector CSP
-        """
-        try:
-            # Construir rutas completas desde la configuración
-            pose2d_path = mmpose_config.models_dir / self.config['pose2d']
-            pose2d_weights_path = mmpose_config.models_dir / self.config['pose2d_weights']
+        super().__init__(model_name="csp", config_key="csp")
+        # CSP usa WholeBody keypoints (133 keypoints total)
+        # 17 body + 6 feet + 42 hands + 68 face = 133
+        self.keypoints_names = [
+            # Body keypoints (17) - COCO format
+            "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+            "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+            "left_wrist", "right_wrist", "left_hip", "right_hip",
+            "left_knee", "right_knee", "left_ankle", "right_ankle",
             
-            # Verificar que los archivos existen
-            if not pose2d_path.exists():
-                logger.error(f"Config file not found: {pose2d_path}")
-                return False
-            if not pose2d_weights_path.exists():
-                logger.error(f"Weights file not found: {pose2d_weights_path}")
-                return False
+            # Foot keypoints (6)
+            "left_big_toe", "left_small_toe", "left_heel",
+            "right_big_toe", "right_small_toe", "right_heel",
             
-            # Inicializar el inferenciador
-            self.inferencer = MMPoseInferencer(
-                pose2d=str(pose2d_path),
-                pose2d_weights=str(pose2d_weights_path),
-                device=self.config['device']
-            )
+            # Face keypoints (68) - following 68-point facial landmark convention
+            "face_0", "face_1", "face_2", "face_3", "face_4", "face_5", "face_6", "face_7", "face_8",
+            "face_9", "face_10", "face_11", "face_12", "face_13", "face_14", "face_15", "face_16",
+            "face_17", "face_18", "face_19", "face_20", "face_21", "face_22", "face_23", "face_24",
+            "face_25", "face_26", "face_27", "face_28", "face_29", "face_30", "face_31", "face_32",
+            "face_33", "face_34", "face_35", "face_36", "face_37", "face_38", "face_39", "face_40",
+            "face_41", "face_42", "face_43", "face_44", "face_45", "face_46", "face_47", "face_48",
+            "face_49", "face_50", "face_51", "face_52", "face_53", "face_54", "face_55", "face_56",
+            "face_57", "face_58", "face_59", "face_60", "face_61", "face_62", "face_63", "face_64",
+            "face_65", "face_66", "face_67",
             
-            self.is_initialized = True
-            logger.info("CSP detector initialized successfully")
-            return True
+            # Left hand keypoints (21)
+            "left_thumb_1", "left_thumb_2", "left_thumb_3", "left_thumb_4",
+            "left_forefinger_1", "left_forefinger_2", "left_forefinger_3", "left_forefinger_4",
+            "left_middle_finger_1", "left_middle_finger_2", "left_middle_finger_3", "left_middle_finger_4",
+            "left_ring_finger_1", "left_ring_finger_2", "left_ring_finger_3", "left_ring_finger_4",
+            "left_pinky_finger_1", "left_pinky_finger_2", "left_pinky_finger_3", "left_pinky_finger_4",
+            "left_hand_root",
             
-        except Exception as e:
-            logger.error(f"Error initializing CSP detector: {e}")
-            return False
-    
-    def process_chunk(self, video_path: Path, patient_id: str, session_id: str, 
-                     camera_id: int, chunk_id: str) -> bool:
-        """
-        Procesar un chunk de video y guardar keypoints
-        
-        Args:
-            video_path: Ruta al archivo de video del chunk
-            patient_id: ID del paciente
-            session_id: ID de la sesión
-            camera_id: ID de la cámara
-            chunk_id: ID del chunk
-            
-        Returns:
-            True si el procesamiento fue exitoso
-        """
-        if not self.is_initialized:
-            logger.error("Detector not initialized")
-            return False
-            
-        try:
-            # Crear directorios de salida para keypoints
-            keypoints_base_dir = self._create_keypoints_directories(
-                patient_id, session_id, camera_id
-            )
-            
-            # Configurar argumentos para el inferenciador
-            inference_args = {
-                'return_vis': processing_config.save_annotated_videos,
-                'show': False
-            }
-            
-            # Si hay que guardar videos anotados, configurar directorios
-            if processing_config.save_annotated_videos:
-                annotated_dir = self._create_annotated_video_directory(
-                    patient_id, session_id, camera_id
-                )
-                inference_args.update({
-                    'vis_out_dir': str(annotated_dir),
-                    'video_out': str(annotated_dir / f'{chunk_id}_annotated.mp4'),
-                    'radius': 4,
-                    'thickness': 2,
-                    'skeleton_style': 'mmpose'
-                })
-            
-            # Ejecutar inferencia
-            result_generator = self.inferencer(str(video_path), **inference_args)
-            
-            # Procesar resultados frame por frame
-            coordinates_dir = keypoints_base_dir / 'coordinates'
-            confidence_dir = keypoints_base_dir / 'confidence'
-            
-            for frame_idx, results in enumerate(result_generator):
-                if results['predictions'] and len(results['predictions'][0]) > 0:
-                    # Extraer keypoints y confianzas
-                    keypoints = np.array(results['predictions'][0][0]['keypoints'])
-                    scores = np.array(results['predictions'][0][0]['keypoint_scores'])
-                    
-                    # Guardar archivos
-                    filename = f"{chunk_id}_{frame_idx}"
-                    np.save(coordinates_dir / f"{filename}.npy", keypoints)
-                    np.save(confidence_dir / f"{filename}.npy", scores)
-                else:
-                    # Si no hay detecciones, guardar arrays vacíos
-                    filename = f"{chunk_id}_{frame_idx}"
-                    empty_keypoints = np.zeros((17, 2))  # 17 keypoints, 2 coordenadas
-                    empty_scores = np.zeros(17)  # 17 scores
-                    np.save(coordinates_dir / f"{filename}.npy", empty_keypoints)
-                    np.save(confidence_dir / f"{filename}.npy", empty_scores)
-            
-            logger.info(f"CSP processing completed for chunk {chunk_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error processing chunk {chunk_id}: {e}")
-            return False
-    
-    def _create_keypoints_directories(self, patient_id: str, session_id: str, 
-                                    camera_id: int) -> Path:
-        """Crear directorios para guardar keypoints"""
-        base_dir = (data_config.unprocessed_dir / f"patient{patient_id}" / 
-                   f"session{session_id}" / "keypoints2D" / f"camera{camera_id}")
-        
-        coordinates_dir = base_dir / 'coordinates'
-        confidence_dir = base_dir / 'confidence'
-        
-        coordinates_dir.mkdir(parents=True, exist_ok=True)
-        confidence_dir.mkdir(parents=True, exist_ok=True)
-        
-        return base_dir
-    
-    def _create_annotated_video_directory(self, patient_id: str, session_id: str, 
-                                        camera_id: int) -> Path:
-        """Crear directorio para videos anotados"""
-        annotated_dir = (data_config.annotated_videos_dir / "csp" / 
-                        f"patient{patient_id}" / f"session{session_id}" / 
-                        f"camera{camera_id}")
-        
-        annotated_dir.mkdir(parents=True, exist_ok=True)
-        return annotated_dir
+            # Right hand keypoints (21)
+            "right_thumb_1", "right_thumb_2", "right_thumb_3", "right_thumb_4",
+            "right_forefinger_1", "right_forefinger_2", "right_forefinger_3", "right_forefinger_4",
+            "right_middle_finger_1", "right_middle_finger_2", "right_middle_finger_3", "right_middle_finger_4",
+            "right_ring_finger_1", "right_ring_finger_2", "right_ring_finger_3", "right_ring_finger_4",
+            "right_pinky_finger_1", "right_pinky_finger_2", "right_pinky_finger_3", "right_pinky_finger_4",
+            "right_hand_root"
+        ]
