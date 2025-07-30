@@ -9,6 +9,7 @@ import json
 import numpy as np
 from pathlib import Path
 from typing import Dict
+import threading
 
 # Configurar logging
 logging.basicConfig(
@@ -34,6 +35,9 @@ data_config.ensure_directories()
 
 # Inicializar coordinador de procesamiento
 pose_coordinator = PoseProcessingCoordinator()
+
+# Lock para evitar múltiples inicializaciones concurrentes
+coordinator_lock = threading.Lock()
 
 # Variable global para sesión actual
 current_session = {
@@ -437,12 +441,18 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # Inicializar coordinator al recibir el primer chunk
-        if not pose_coordinator.initialized:
-            logger.info("Inicializando coordinador de procesamiento de pose...")
-            if not pose_coordinator.initialize_all():
-                logger.error("Error inicializando coordinador de pose")
-                return jsonify({'error': 'Error initializing pose processing coordinator'}), 500
+        # Inicializar coordinator al recibir el primer chunk (solo una vez, thread-safe)
+        with coordinator_lock:
+            if not pose_coordinator.initialized:
+                logger.info("Inicializando coordinador de procesamiento de pose...")
+                initialization_success = pose_coordinator.initialize_all()
+                
+                # Permitir continuar aunque algunos detectores fallen, siempre que al menos uno funcione
+                if not initialization_success:
+                    logger.error("Error inicializando coordinador de pose - ningún detector se inicializó correctamente")
+                    return jsonify({'error': 'Error initializing pose processing coordinator - no detectors available'}), 500
+                else:
+                    logger.info("Coordinador inicializado correctamente con al menos un detector")
         
         # Solo procesar si es chunk 0 de cámara 0
         processing_results = None
