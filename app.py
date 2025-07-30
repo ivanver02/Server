@@ -43,6 +43,7 @@ current_session = {
     'cameras_count': 0
 }
 
+'''
 def _check_and_trigger_3d_reconstruction(patient_id: str, session_id: str, chunk_number: int):
     """
     Verificar si tenemos todos los keypoints 2D necesarios para reconstrucción 3D
@@ -195,6 +196,7 @@ def _triangulate_chunk_simple(triangulator: Triangulator, camera_keypoints: Dict
     except Exception as e:
         logger.error(f"Error en triangulación simple: {e}")
         return False
+'''
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -472,6 +474,7 @@ def receive_chunk():
         logger.error(f"Error recibiendo chunk: {str(e)}")
         return jsonify({'error': f'Failed to receive chunk: {str(e)}'}), 500
 
+'''
 @app.route('/api/cameras/recalibrate', methods=['POST'])
 def recalibrate_cameras():
     """
@@ -531,6 +534,7 @@ def recalibrate_cameras():
         logger.error(f"Error en recalibración: {str(e)}")
         return jsonify({'error': f'Failed to recalibrate cameras: {str(e)}'}), 500
 
+
 @app.route('/api/pipeline/status', methods=['GET'])
 def get_pipeline_status():
     """
@@ -558,6 +562,7 @@ def get_session_analysis(patient_id: str, session_id: str):
     except Exception as e:
         logger.error(f"Error obteniendo análisis de sesión: {str(e)}")
         return jsonify({'error': f'Failed to get session analysis: {str(e)}'}), 500
+'''
 
 @app.errorhandler(413)
 def too_large(e):
