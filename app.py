@@ -299,9 +299,9 @@ def cancel_session():
         patient_id = current_session['patient_id']
         session_id = current_session['session_id']
         
-        # Detener coordinador y limpiar cola
+        # Detener coordinador si está inicializado
         if pose_coordinator.initialized:
-            pose_coordinator.stop_processing()
+            logger.info("Deteniendo coordinador de procesamiento...")
         
         # Limpiar directorios de la sesión cancelada
         session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
@@ -359,10 +359,6 @@ def end_session():
         patient_id = current_session['patient_id']
         session_id = current_session['session_id']
         
-        # Señalar fin de sesión al coordinador y limpiar
-        if pose_coordinator.initialized:
-            pose_coordinator.clear_session()
-        
         # No eliminar datos, solo marcar sesión como finalizada
         logger.info(f"Sesión finalizada normalmente - Paciente: {patient_id}, Sesión: {session_id}")
         
@@ -386,57 +382,6 @@ def end_session():
     except Exception as e:
         logger.error(f"Error finalizando sesión: {str(e)}")
         return jsonify({'error': f'Failed to end session: {str(e)}'}), 500
-
-@app.route('/api/processing/queue/status', methods=['GET'])
-def get_queue_status():
-    """
-    Obtener estado actual de la cola de procesamiento
-    """
-    try:
-        if not pose_coordinator.initialized:
-            return jsonify({
-                'coordinator_initialized': False,
-                'message': 'Pose coordinator not initialized'
-            })
-        
-        queue_status = pose_coordinator.get_queue_status()
-        
-        return jsonify({
-            'coordinator_initialized': True,
-            'queue_status': queue_status,
-            'current_session': current_session if current_session['is_active'] else None
-        })
-        
-    except Exception as e:
-        logger.error(f"Error obteniendo estado de cola: {str(e)}")
-        return jsonify({'error': f'Failed to get queue status: {str(e)}'}), 500
-
-@app.route('/api/processing/reconstruction/ready', methods=['GET'])
-def check_3d_reconstruction_ready():
-    """
-    Verificar si el sistema está listo para reconstrucción 3D
-    """
-    try:
-        if not pose_coordinator.initialized:
-            return jsonify({
-                'ready': False,
-                'reason': 'Pose coordinator not initialized'
-            })
-        
-        queue_status = pose_coordinator.get_queue_status()
-        
-        return jsonify({
-            'ready': queue_status['ready_for_3d_reconstruction'],
-            'session_finished': queue_status['session_finished'],
-            'queue_empty': queue_status['current_size'] == 0,
-            'total_processed': queue_status['total_processed'],
-            'worker_alive': queue_status['worker_alive'],
-            'current_session': current_session if current_session['is_active'] else None
-        })
-        
-    except Exception as e:
-        logger.error(f"Error verificando estado de reconstrucción 3D: {str(e)}")
-        return jsonify({'error': f'Failed to check 3D reconstruction status: {str(e)}'}), 500
 
 @app.route('/api/chunks/receive', methods=['POST'])
 def receive_chunk():
@@ -492,45 +437,35 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # Inicializar coordinator si no está inicializado
-        if not pose_coordinator.initialized:
-            logger.info("Inicializando coordinador de procesamiento de pose...")
-            if not pose_coordinator.initialize_all():
-                logger.error("Error inicializando coordinador de pose")
-                return jsonify({'error': 'Error initializing pose processing coordinator'}), 500
-        
-        # Agregar chunk a la cola de procesamiento asíncrono
-        chunk_id = str(chunk_number)  # Usar chunk_number como chunk_id
-        queue_success = pose_coordinator.add_chunk_to_queue(
-            video_path=file_path,
-            patient_id=patient_id,
-            session_id=session_id,
-            camera_id=camera_id,
-            chunk_id=chunk_id
-        )
-        
-        if not queue_success:
-            logger.error(f"No se pudo agregar chunk {chunk_number} a la cola de procesamiento")
-            return jsonify({'error': 'Failed to add chunk to processing queue'}), 500
-        
-        # Obtener estado actual de la cola
-        queue_status = pose_coordinator.get_queue_status()
-        
-        logger.info(f"Chunk {chunk_number} agregado a cola - Estado: {queue_status['current_size']} pendientes, "
-                   f"{queue_status['total_processed']} procesados")
+        # TODO: Procesamiento futuro con coordinator
+        # 
+        # # Inicializar coordinator si no está inicializado
+        # if not pose_coordinator.initialized:
+        #     logger.info("Inicializando coordinador de procesamiento de pose...")
+        #     if not pose_coordinator.initialize_all():
+        #         logger.error("Error inicializando coordinador de pose")
+        #         return jsonify({'error': 'Error initializing pose processing coordinator'}), 500
+        # 
+        # # Procesar chunk directamente con todos los detectores
+        # chunk_id = str(chunk_number)
+        # processing_results = pose_coordinator.process_chunk(
+        #     video_path=file_path,
+        #     patient_id=patient_id,
+        #     session_id=session_id,
+        #     camera_id=camera_id,
+        #     chunk_id=chunk_id
+        # )
+        # 
+        # success_count = sum(processing_results.values())
+        # logger.info(f"Chunk {chunk_number} procesado - {success_count}/{len(processing_results)} detectores exitosos")
 
         return jsonify({
-            'status': 'chunk_received_and_queued',
+            'status': 'chunk_received',
             'camera_id': camera_id,
             'chunk_number': chunk_number,
             'file_path': str(file_path),
             'file_size': file_path.stat().st_size,
-            'queue_status': {
-                'queued_successfully': queue_success,
-                'current_queue_size': queue_status['current_size'],
-                'total_chunks_processed': queue_status['total_processed'],
-                'ready_for_3d_reconstruction': queue_status['ready_for_3d_reconstruction']
-            }
+            'message': 'Chunk saved successfully'
         })
         
     except Exception as e:
