@@ -20,6 +20,36 @@ class ServerConfig:
 
 
 @dataclass
+class GPUConfig:
+    """Configuración de GPUs disponibles para procesamiento"""
+    # Lista de GPUs disponibles (IDs que se pueden usar)
+    # Ejemplos:
+    # [0] - Solo GPU 0 disponible
+    # [1] - Solo GPU 1 disponible  
+    # [0, 1] - Ambas GPUs disponibles (por defecto)
+    # [] - Sin GPUs (usar CPU)
+    available_gpus: list = field(default_factory=lambda: [0, 1])
+    
+    # Número máximo de chunks procesándose simultáneamente
+    # Se ajusta automáticamente al número de GPUs disponibles
+    max_concurrent_chunks: int = None
+    
+    def __post_init__(self):
+        """Ajustar configuración después de inicialización"""
+        # Si no se especifica max_concurrent_chunks, usar el número de GPUs disponibles
+        if self.max_concurrent_chunks is None:
+            self.max_concurrent_chunks = max(1, len(self.available_gpus))
+    
+    def get_gpu_usage_dict(self) -> Dict[int, bool]:
+        """Obtener diccionario de uso de GPUs inicializado"""
+        return {gpu_id: False for gpu_id in self.available_gpus}
+    
+    def is_gpu_available(self, gpu_id: int) -> bool:
+        """Verificar si una GPU específica está disponible"""
+        return gpu_id in self.available_gpus
+
+
+@dataclass
 class DataConfig:
     """Configuración de directorios de datos"""
     base_data_dir: Path = BASE_DIR / "data"
@@ -99,6 +129,7 @@ class ProcessingConfig:
 
 # Instancias globales de configuración
 server_config = ServerConfig()
+gpu_config = GPUConfig()
 processing_config = ProcessingConfig()
 data_config = DataConfig()
 mmpose_config = MMPoseConfig()

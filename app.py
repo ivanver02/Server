@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Importar configuraciones
-from config import server_config, data_config
+from config import server_config, data_config, gpu_config
 from backend.processing.coordinator import PoseProcessingCoordinator
 
 # Crear aplicación Flask
@@ -39,8 +39,8 @@ pose_coordinator = PoseProcessingCoordinator()
 # Lock para evitar múltiples inicializaciones concurrentes
 coordinator_lock = threading.Lock()
 
-# Lock para procesar chunks uno a la vez
-processing_lock = threading.Lock()
+# Semáforo para permitir chunks procesándose simultáneamente según configuración GPU
+processing_semaphore = threading.Semaphore(gpu_config.max_concurrent_chunks)
 
 # Variable global para sesión actual
 current_session = {
@@ -390,6 +390,30 @@ def end_session():
         logger.error(f"Error finalizando sesión: {str(e)}")
         return jsonify({'error': f'Failed to end session: {str(e)}'}), 500
 
+@app.route('/api/gpu/status', methods=['GET'])
+def get_gpu_status():
+    """
+    Obtener estado actual de las GPUs
+    """
+    try:
+        if not pose_coordinator.initialized:
+            return jsonify({
+                'coordinator_initialized': False,
+                'message': 'Pose coordinator not initialized'
+            })
+        
+        gpu_status = pose_coordinator.get_gpu_status()
+        
+        return jsonify({
+            'coordinator_initialized': True,
+            'gpu_status': gpu_status,
+            'processing_mode': gpu_status.get('mode', 'unknown')
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo estado de GPU: {str(e)}")
+        return jsonify({'error': f'Failed to get GPU status: {str(e)}'}), 500
+
 @app.route('/api/chunks/receive', methods=['POST'])
 def receive_chunk():
     """
@@ -461,9 +485,9 @@ def receive_chunk():
         processing_results = None
         logger.info(f"🎯 Procesando chunk {chunk_number} de cámara {camera_id}")
         
-        # Usar lock para procesar un chunk a la vez
-        with processing_lock:
-            logger.info(f"🔒 Iniciando procesamiento exclusivo de chunk {chunk_number} cámara {camera_id}")
+        # Usar semáforo para permitir chunks procesándose simultáneamente según configuración
+        with processing_semaphore:
+            logger.info(f"🔒 Iniciando procesamiento paralelo de chunk {chunk_number} cámara {camera_id} (máximo {gpu_config.max_concurrent_chunks} simultáneos)")
             
             # Procesar chunk directamente con todos los detectores
             chunk_id = str(chunk_number)
@@ -477,7 +501,7 @@ def receive_chunk():
             
             success_count = sum(processing_results.values())
             logger.info(f"✅ Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
-            logger.info(f"🔓 Procesamiento exclusivo completado para chunk {chunk_number} cámara {camera_id}")
+            logger.info(f"🔓 Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
 
         response_data = {
             'status': 'chunk_received',
@@ -610,6 +634,8 @@ if __name__ == '__main__':
     logger.info(f"Iniciando servidor de análisis de gonartrosis...")
     logger.info(f"Puerto: {server_config.port}")
     logger.info(f"Directorio de datos: {data_config.base_data_dir}")
+    logger.info(f"🎮 GPUs configuradas: {gpu_config.available_gpus}")
+    logger.info(f"🔧 Máximo chunks concurrentes: {gpu_config.max_concurrent_chunks}")
     
     app.run(
         host=server_config.host,
