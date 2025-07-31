@@ -28,7 +28,7 @@ class GPUConfig:
     # [1] - Solo GPU 1 disponible  
     # [0, 1] - Ambas GPUs disponibles (por defecto)
     # [] - Sin GPUs (usar CPU)
-    available_gpus: list = field(default_factory=lambda: [1])
+    available_gpus: list = field(default_factory=lambda: [0, 1])
     
     # Número máximo de chunks procesándose simultáneamente
     # Se ajusta automáticamente al número de GPUs disponibles
@@ -125,7 +125,7 @@ class MMPoseConfig:
 class ProcessingConfig:
     """Configuración para procesamiento de video"""
     # Configuración de videos anotados
-    save_annotated_videos: bool = True  # Si guardar videos con keypoints dibujados
+    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
 
 # Instancias globales de configuración
 server_config = ServerConfig()
