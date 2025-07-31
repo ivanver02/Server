@@ -127,10 +127,20 @@ class ProcessingConfig:
     # Configuración de videos anotados
     save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
 
+@dataclass
+class EnsembleConfig:
+    """Configuración para procesamiento de ensemble"""
+    # Umbral mínimo de confianza para incluir un keypoint en el ensemble
+    confidence_threshold: float = 0.5
+    
+    # Número mínimo de detectores requeridos para generar ensemble
+    min_detectors_required: int = 1
+
 # Instancias globales de configuración
 server_config = ServerConfig()
 gpu_config = GPUConfig()
 processing_config = ProcessingConfig()
+ensemble_config = EnsembleConfig()
 data_config = DataConfig()
 mmpose_config = MMPoseConfig()
 

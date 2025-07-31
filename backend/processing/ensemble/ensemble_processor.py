@@ -12,6 +12,9 @@ from backend.processing.detectors.vitpose import VitPoseDetector
 from backend.processing.detectors.csp import CSPDetector
 from backend.processing.detectors.hrnet import HRNetDetector
 
+# Importar configuración de ensemble
+from config.settings import ensemble_config
+
 logger = logging.getLogger(__name__)
 
 class EnsembleProcessor:
@@ -37,6 +40,7 @@ class EnsembleProcessor:
         
         logger.info(f"EnsembleProcessor inicializado con {len(self.final_keypoint_names)} keypoints finales")
         logger.info(f"Keypoints finales: {self.final_keypoint_names}")
+        logger.info(f"Configuración ensemble: umbral_confianza={ensemble_config.confidence_threshold}, min_detectores={ensemble_config.min_detectors_required}")
     
     def _generate_final_keypoint_names(self) -> List[str]:
         """
@@ -212,8 +216,8 @@ class EnsembleProcessor:
             # Cargar resultados de detectores
             detector_results = self._load_detector_results(patient_id, session_id, camera_id, chunk_number)
             
-            if len(detector_results) < 2:
-                logger.debug(f"Solo {len(detector_results)} detectores disponibles para chunk {chunk_number}")
+            if len(detector_results) < ensemble_config.min_detectors_required:
+                logger.debug(f"Solo {len(detector_results)} detectores disponibles para chunk {chunk_number}, se requieren al menos {ensemble_config.min_detectors_required}")
                 return False
             
             # Obtener todos los frames disponibles
@@ -233,7 +237,7 @@ class EnsembleProcessor:
                     if global_frame in detector_frames:
                         frame_keypoints[detector_name] = detector_frames[global_frame]
                 
-                if len(frame_keypoints) >= 2:  # Al menos 2 detectores
+                if len(frame_keypoints) >= ensemble_config.min_detectors_required:  # Al menos el mínimo configurado
                     ensemble_result = self._combine_keypoints(frame_keypoints)
                     if ensemble_result is not None:
                         ensemble_frames[global_frame] = ensemble_result
@@ -279,6 +283,7 @@ class EnsembleProcessor:
     def _combine_keypoints(self, frame_keypoints: Dict[str, np.ndarray]) -> Optional[np.ndarray]:
         """
         Combinar keypoints usando las ponderaciones de confianza especificadas
+        Solo incluye keypoints con confianza mayor al umbral configurado
         Resultado: array de forma (len(final_keypoint_names), 2)
         """
         try:
@@ -307,11 +312,25 @@ class EnsembleProcessor:
                         detector_kp_idx < len(keypoints) and
                         confidence_weights[detector_kp_idx] > 0):
                         
-                        weight = confidence_weights[detector_kp_idx]
-                        coord = keypoints[detector_kp_idx, :2]  # Solo x, y
-                        
-                        weighted_coords += weight * coord
-                        total_weight += weight
+                        # Verificar que el keypoint tenga suficiente confianza real del modelo
+                        # keypoints shape: (N, 3) donde [:, 2] es la confianza
+                        if keypoints.shape[1] >= 3:
+                            model_confidence = keypoints[detector_kp_idx, 2]  # Confianza real del modelo
+                            
+                            # Solo usar keypoints con confianza mayor al umbral
+                            if model_confidence >= ensemble_config.confidence_threshold:
+                                ensemble_weight = confidence_weights[detector_kp_idx]
+                                coord = keypoints[detector_kp_idx, :2]  # Solo x, y
+                                
+                                weighted_coords += ensemble_weight * coord
+                                total_weight += ensemble_weight
+                        else:
+                            # Si no hay confianza almacenada, usar el keypoint sin filtro
+                            ensemble_weight = confidence_weights[detector_kp_idx]
+                            coord = keypoints[detector_kp_idx, :2]  # Solo x, y
+                            
+                            weighted_coords += ensemble_weight * coord
+                            total_weight += ensemble_weight
                 
                 # Normalizar por peso total
                 if total_weight > 0:
