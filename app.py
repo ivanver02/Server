@@ -50,6 +50,86 @@ current_session = {
     'cameras_count': 0
 }
 
+# Variable para controlar si ya verificamos el chunk 2
+chunk_2_verified = False
+
+def _check_camera_chunks_integrity(patient_id: str, session_id: str, cameras_count: int):
+    """
+    Verificar que todas las cámaras tengan al menos el chunk 0
+    """
+    try:
+        session_base = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+        
+        for camera_id in range(cameras_count):
+            camera_dir = session_base / f"camera{camera_id}"
+            chunk_0_file = camera_dir / "0.mp4"
+            
+            if not chunk_0_file.exists():
+                logger.error(f"🚨 FALLO DE CÁMARAS: La cámara {camera_id} NO tiene chunk 0")
+                return False
+        
+        logger.info(f"✅ Verificación de integridad OK: Todas las {cameras_count} cámaras tienen chunk 0")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error verificando integridad de chunks: {e}")
+        return False
+
+def _cancel_session_due_to_camera_failure():
+    """
+    Cancelar sesión debido a fallo de cámaras
+    """
+    try:
+        if not current_session['is_active']:
+            return
+        
+        patient_id = current_session['patient_id']
+        session_id = current_session['session_id']
+        
+        logger.error("🚨🔌 CANCELANDO SESIÓN POR FALLO DE CÁMARAS - DESCONECTAR Y CONECTAR EL SWITCH 🔌🚨")
+        
+        # Detener coordinador si está inicializado
+        if pose_coordinator.initialized:
+            logger.info("Deteniendo coordinador de procesamiento...")
+        
+        # Limpiar directorios de la sesión cancelada
+        session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+        
+        if session_path.exists():
+            import shutil
+            shutil.rmtree(session_path)
+            logger.info(f"Directorio de sesión eliminado: {session_path}")
+        
+        # También limpiar datos procesados si existen
+        processed_paths = [
+            data_config.photos_dir / f"patient{patient_id}" / f"session{session_id}",
+            data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}",
+            data_config.keypoints_3d_dir / f"patient{patient_id}" / f"session{session_id}"
+        ]
+        
+        for path in processed_paths:
+            if path.exists():
+                import shutil
+                shutil.rmtree(path)
+                logger.info(f"Directorio procesado eliminado: {path}")
+        
+        # Reiniciar sesión
+        logger.info(f"Sesión cancelada por fallo de cámaras - Paciente: {patient_id}, Sesión: {session_id}")
+        
+        current_session.update({
+            'patient_id': None,
+            'session_id': None,
+            'is_active': False,
+            'cameras_count': 0
+        })
+        
+        # Reiniciar flag de verificación
+        global chunk_2_verified
+        chunk_2_verified = False
+        
+    except Exception as e:
+        logger.error(f"Error cancelando sesión por fallo de cámaras: {str(e)}")
+
 '''
 def _check_and_trigger_3d_reconstruction(patient_id: str, session_id: str, chunk_number: int):
     """
@@ -272,6 +352,10 @@ def start_session():
             'cameras_count': cameras_count
         })
         
+        # Reiniciar flag de verificación de chunk 2
+        global chunk_2_verified
+        chunk_2_verified = False
+        
         logger.info(f"Sesión iniciada - Paciente: {patient_id}, Sesión: {session_id}, Cámaras: {cameras_count}")
         
         return jsonify({
@@ -467,6 +551,22 @@ def receive_chunk():
         file.save(str(file_path))
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
+
+        # Verificar integridad de cámaras cuando llegue el chunk 2 por primera vez
+        global chunk_2_verified
+        if chunk_number == 2 and not chunk_2_verified:
+            chunk_2_verified = True
+            logger.info("🔍 Verificando integridad de chunks de cámaras al recibir chunk 2...")
+            
+            integrity_ok = _check_camera_chunks_integrity(patient_id, session_id, current_session['cameras_count'])
+            if not integrity_ok:
+                logger.error("🚨 FALLO DE CÁMARAS DETECTADO - Algunas cámaras no enviaron chunks correctamente")
+                _cancel_session_due_to_camera_failure()
+                return jsonify({
+                    'error': 'CAMERA_FAILURE_DETECTED',
+                    'message': 'Fallo crítico de cámaras detectado. Sesión cancelada automáticamente.',
+                    'action_required': 'Desconectar y conectar el switch de las cámaras antes de intentar una nueva grabación.'
+                }), 500
 
         # Inicializar coordinator al recibir el primer chunk (solo una vez, thread-safe)
         with coordinator_lock:
