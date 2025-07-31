@@ -2,7 +2,6 @@
 Procesador de ensemble generalizable para combinar múltiples detectores de pose
 """
 import numpy as np
-import os
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -88,25 +87,24 @@ class EnsembleProcessor:
             logger.warning(f"Sesión no encontrada para finalizar: patient_id={patient_id}, session_id={session_id}")
             return -1
         
-        # Buscar el chunk máximo para esta sesión
-        session_path = os.path.join(self.processed_data_path, patient_id, session_id)
+        # Buscar el chunk máximo para esta sesión en los datos procesados
+        processed_keypoints_path = self.base_data_dir / "processed" / "2D_keypoints" / f"patient{patient_id}" / f"session{session_id}"
         max_chunk = -1
         
-        if os.path.exists(session_path):
+        if processed_keypoints_path.exists():
             for detector_name in ['vitpose', 'cspnet', 'hrnet']:
-                detector_path = os.path.join(session_path, detector_name)
-                if os.path.exists(detector_path):
-                    for camera_folder in os.listdir(detector_path):
-                        if camera_folder.startswith('camera'):
-                            camera_path = os.path.join(detector_path, camera_folder)
-                            if os.path.isdir(camera_path):
-                                for chunk_file in os.listdir(camera_path):
-                                    if chunk_file.endswith('.npy'):
-                                        try:
-                                            chunk_num = int(chunk_file.split('_')[-1].split('.')[0])
-                                            max_chunk = max(max_chunk, chunk_num)
-                                        except (ValueError, IndexError):
-                                            continue
+                detector_path = processed_keypoints_path / detector_name
+                if detector_path.exists():
+                    for camera_folder in detector_path.iterdir():
+                        if camera_folder.is_dir() and camera_folder.name.startswith('camera'):
+                            coordinates_path = camera_folder / "coordinates"
+                            if coordinates_path.exists():
+                                for chunk_file in coordinates_path.glob("*.npy"):
+                                    try:
+                                        chunk_num = int(chunk_file.stem.split('_')[-1])
+                                        max_chunk = max(max_chunk, chunk_num)
+                                    except (ValueError, IndexError):
+                                        continue
         
         self.active_sessions[patient_id][session_id]['max_chunk'] = max_chunk
         logger.info(f"Sesión finalizada: patient_id={patient_id}, session_id={session_id}, max_chunk={max_chunk}")
