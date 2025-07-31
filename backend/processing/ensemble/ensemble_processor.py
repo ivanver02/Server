@@ -213,52 +213,45 @@ class EnsembleProcessor:
     def _process_chunk_ensemble(self, patient_id: str, session_id: str, camera_id: int, chunk_number: int) -> bool:
         """Procesar ensemble para un chunk específico de una cámara"""
         try:
-            # Cargar resultados de detectores
-            detector_results = self._load_detector_results(patient_id, session_id, camera_id, chunk_number)
+            # Obtener todos los archivos frame_chunk.npy de todos los detectores para este chunk
+            all_frame_files = self._get_all_frame_files(patient_id, session_id, camera_id, chunk_number)
             
-            if len(detector_results) < ensemble_config.min_detectors_required:
-                logger.debug(f"Solo {len(detector_results)} detectores disponibles para chunk {chunk_number}, se requieren al menos {ensemble_config.min_detectors_required}")
+            if not all_frame_files:
+                logger.debug(f"No se encontraron archivos para chunk {chunk_number}, cámara {camera_id}")
                 return False
             
-            # Obtener todos los frames disponibles
-            all_frames = set()
-            for detector_frames in detector_results.values():
-                all_frames.update(detector_frames.keys())
+            total_processed = 0
             
-            if not all_frames:
-                return False
-            
-            ensemble_frames = {}
-            
-            # Procesar ensemble para cada frame
-            for global_frame in sorted(all_frames):
-                frame_keypoints = {}
-                for detector_name, detector_frames in detector_results.items():
-                    if global_frame in detector_frames:
-                        frame_keypoints[detector_name] = detector_frames[global_frame]
+            # Procesar cada archivo frame_chunk.npy individualmente
+            for frame_number in sorted(all_frame_files.keys()):
+                frame_data = all_frame_files[frame_number]
                 
-                if len(frame_keypoints) >= ensemble_config.min_detectors_required:  # Al menos el mínimo configurado
-                    ensemble_result = self._combine_keypoints(frame_keypoints)
-                    if ensemble_result is not None:
-                        ensemble_frames[global_frame] = ensemble_result
+                # Verificar que tenemos suficientes detectores para este frame
+                if len(frame_data) < ensemble_config.min_detectors_required:
+                    continue
+                
+                # Combinar keypoints de todos los detectores para este frame específico
+                ensemble_result = self._combine_keypoints(frame_data)
+                if ensemble_result is not None:
+                    # Guardar resultado individual frame_chunk.npy
+                    self._save_single_frame_result(ensemble_result, patient_id, session_id, camera_id, frame_number, chunk_number)
+                    total_processed += 1
             
-            # Guardar resultados
-            if ensemble_frames:
-                self._save_ensemble_results(ensemble_frames, patient_id, session_id, camera_id, chunk_number)
-                logger.debug(f"Ensemble guardado para chunk {chunk_number}, cámara {camera_id}: {len(ensemble_frames)} frames")
+            if total_processed > 0:
+                logger.info(f"Ensemble chunk {chunk_number}, cámara {camera_id}: {total_processed} frames procesados")
                 return True
             
             return False
             
         except Exception as e:
-            logger.error(f"Error procesando ensemble: {e}")
+            logger.error(f"Error procesando ensemble chunk {chunk_number}: {e}")
             return False
     
-    def _load_detector_results(self, patient_id: str, session_id: str, camera_id: int, chunk_number: int) -> Dict:
-        """Cargar resultados de todos los detectores para un chunk"""
-        detector_results = {}
+    def _get_all_frame_files(self, patient_id: str, session_id: str, camera_id: int, chunk_number: int) -> Dict:
+        """Obtener todos los archivos frame_chunk.npy organizados por frame number"""
+        frame_files = {}
         
-        # Los keypoints están en unprocessed, no en processed
+        # Los keypoints están en unprocessed
         keypoints_base = self.base_data_dir / "unprocessed" / f"patient{patient_id}" / f"session{session_id}" / "keypoints2D"
         
         for detector_name in self.detector_instances.keys():
@@ -268,24 +261,45 @@ class EnsembleProcessor:
                 logger.debug(f"No existe directorio para detector {detector_name}: {detector_dir}")
                 continue
                 
-            # Buscar archivos de este chunk - formato: frame_chunk.npy (ej: 0_44.npy)
-            frame_files = list(detector_dir.glob(f"*_{chunk_number}.npy"))
+            # Buscar archivos de este chunk - formato: frame_chunk.npy (ej: 120_3.npy)
+            chunk_files = list(detector_dir.glob(f"*_{chunk_number}.npy"))
             
-            if frame_files:
-                detector_frames = {}
-                for frame_file in frame_files:
+            for chunk_file in chunk_files:
+                try:
                     # El nombre del archivo es frame_chunk.npy, extraer el frame
-                    global_frame = int(frame_file.stem.split('_')[0])
-                    keypoints = np.load(frame_file)
-                    detector_frames[global_frame] = keypoints
+                    frame_number = int(chunk_file.stem.split('_')[0])
+                    keypoints = np.load(chunk_file)
                     
-                detector_results[detector_name] = detector_frames
-                logger.debug(f"Cargados {len(detector_frames)} frames para detector {detector_name}, chunk {chunk_number}")
-            else:
-                logger.debug(f"No se encontraron archivos para detector {detector_name}, chunk {chunk_number} en {detector_dir}")
+                    # Organizar por frame number
+                    if frame_number not in frame_files:
+                        frame_files[frame_number] = {}
+                    
+                    frame_files[frame_number][detector_name] = keypoints
+                    
+                except (ValueError, IndexError) as e:
+                    logger.debug(f"Error procesando archivo {chunk_file}: {e}")
+                    continue
         
-        logger.info(f"Resultados cargados: {len(detector_results)} detectores para chunk {chunk_number}, cámara {camera_id}")
-        return detector_results
+        logger.debug(f"Encontrados {len(frame_files)} frames únicos para chunk {chunk_number}, cámara {camera_id}")
+        return frame_files
+
+    def _save_single_frame_result(self, keypoints: np.ndarray, patient_id: str, session_id: str, 
+                                camera_id: int, frame_number: int, chunk_number: int):
+        """Guardar resultado de un frame individual como frame_chunk.npy"""
+        try:
+            # Guardar en processed, directamente en la carpeta de la cámara (sin subcarpetas)
+            output_dir = (self.base_data_dir / "processed" / "2D_keypoints" / 
+                         f"patient{patient_id}" / f"session{session_id}" / f"camera{camera_id}")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Formato: frame_chunk.npy (ej: 120_3.npy)
+            output_file = output_dir / f"{frame_number}_{chunk_number}.npy"
+            np.save(output_file, keypoints)
+            
+            logger.debug(f"Frame guardado: {output_file}")
+                
+        except Exception as e:
+            logger.error(f"Error guardando frame {frame_number}_{chunk_number}: {e}")
     
     def _combine_keypoints(self, frame_keypoints: Dict[str, np.ndarray]) -> Optional[np.ndarray]:
         """
@@ -367,22 +381,3 @@ class EnsembleProcessor:
         except Exception as e:
             logger.error(f"Error buscando índice de keypoint: {e}")
             return None
-    
-    def _save_ensemble_results(self, ensemble_frames: Dict, patient_id: str, session_id: str, 
-                             camera_id: int, chunk_number: int):
-        """Guardar resultados del ensemble como archivos .npy"""
-        try:
-            # Guardar en processed, siguiendo la estructura estándar
-            output_dir = (self.base_data_dir / "processed" / "2D_keypoints" / 
-                         f"patient{patient_id}" / f"session{session_id}" / 
-                         "ensemble" / f"camera{camera_id}" / "coordinates")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            for global_frame, keypoints in ensemble_frames.items():
-                output_file = output_dir / f"{global_frame}_{chunk_number}.npy"
-                np.save(output_file, keypoints)
-                
-            logger.info(f"Ensemble guardado: {len(ensemble_frames)} frames en {output_dir}")
-                
-        except Exception as e:
-            logger.error(f"Error guardando resultados de ensemble: {e}")
