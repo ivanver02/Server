@@ -356,6 +356,9 @@ def start_session():
             'cameras_count': cameras_count
         })
         
+        # Registrar sesión en ensemble processor
+        ensemble_processor.register_session_start(patient_id, session_id, cameras_count)
+        
         # Reiniciar flag de verificación de chunk 2
         global chunk_2_verified
         chunk_2_verified = False
@@ -454,17 +457,16 @@ def end_session():
         patient_id = current_session['patient_id']
         session_id = current_session['session_id']
         
-        # No eliminar datos, solo marcar sesión como finalizada
-        logger.info(f"Sesión finalizada normalmente - Paciente: {patient_id}, Sesión: {session_id}")
+        # Registrar finalización de sesión y obtener max_chunk
+        max_chunk = ensemble_processor.register_session_end(patient_id, session_id)
         
-        # Procesar ensemble directamente ahora que la sesión terminó
-        try:
-            logger.info("🎬 Iniciando procesamiento de ensemble para sesión completada")
-            ensemble_processor.process_session_ensemble(patient_id, session_id)
-            logger.info("✅ Procesamiento de ensemble completado")
-        except Exception as e:
-            logger.error(f"Error procesando ensemble: {e}")
-            # No fallar la finalización de sesión si ensemble falla
+        logger.info(f"Sesión finalizada normalmente - Paciente: {patient_id}, Sesión: {session_id}, Max chunk: {max_chunk}")
+        
+        # El ensemble se procesará automáticamente cuando todas las cámaras completen el chunk final
+        if max_chunk >= 0:
+            logger.info(f"🎬 Esperando que todas las cámaras completen el chunk final {max_chunk} para iniciar ensemble")
+        else:
+            logger.warning("No se encontraron chunks para procesar en ensemble")
         
         old_session = current_session.copy()
         current_session.update({
@@ -615,6 +617,13 @@ def receive_chunk():
             success_count = sum(processing_results.values())
             logger.info(f"✅ Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
             logger.info(f"🔓 Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
+            
+            # Registrar finalización del chunk en ensemble processor
+            chunk_completed = ensemble_processor.register_chunk_completion(
+                patient_id, session_id, f"camera{camera_id}", chunk_number
+            )
+            if chunk_completed:
+                logger.info(f"🎬 ¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
 
         response_data = {
             'status': 'chunk_received',

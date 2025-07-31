@@ -2,6 +2,8 @@
 Procesador de ensemble generalizable para combinar múltiples detectores de pose
 """
 import numpy as np
+import os
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 import logging
@@ -30,6 +32,9 @@ class EnsembleProcessor:
         
         # Generar lista de keypoints finales basada en ponderaciones no nulas
         self.final_keypoint_names = self._generate_final_keypoint_names()
+        
+        # Registro de sesiones activas: {patient_id: {session_id: {'max_chunk': int, 'cameras_count': int}}}
+        self.active_sessions = {}
         
         logger.info(f"EnsembleProcessor inicializado con {len(self.final_keypoint_names)} keypoints finales")
         logger.info(f"Keypoints finales: {self.final_keypoint_names}")
@@ -64,6 +69,94 @@ class EnsembleProcessor:
         
         return final_names
     
+    def register_session_start(self, patient_id: str, session_id: str, cameras_count: int):
+        """Registra el inicio de una sesión para tracking"""
+        if patient_id not in self.active_sessions:
+            self.active_sessions[patient_id] = {}
+        
+        self.active_sessions[patient_id][session_id] = {
+            'max_chunk': -1,
+            'cameras_count': cameras_count,
+            'completed_cameras': set()
+        }
+        
+        logger.info(f"Sesión registrada: patient_id={patient_id}, session_id={session_id}, cameras_count={cameras_count}")
+
+    def register_session_end(self, patient_id: str, session_id: str) -> int:
+        """Registra el final de una sesión y determina el max_chunk"""
+        if patient_id not in self.active_sessions or session_id not in self.active_sessions[patient_id]:
+            logger.warning(f"Sesión no encontrada para finalizar: patient_id={patient_id}, session_id={session_id}")
+            return -1
+        
+        # Buscar el chunk máximo para esta sesión
+        session_path = os.path.join(self.processed_data_path, patient_id, session_id)
+        max_chunk = -1
+        
+        if os.path.exists(session_path):
+            for detector_name in ['vitpose', 'cspnet', 'hrnet']:
+                detector_path = os.path.join(session_path, detector_name)
+                if os.path.exists(detector_path):
+                    for camera_folder in os.listdir(detector_path):
+                        if camera_folder.startswith('camera'):
+                            camera_path = os.path.join(detector_path, camera_folder)
+                            if os.path.isdir(camera_path):
+                                for chunk_file in os.listdir(camera_path):
+                                    if chunk_file.endswith('.npy'):
+                                        try:
+                                            chunk_num = int(chunk_file.split('_')[-1].split('.')[0])
+                                            max_chunk = max(max_chunk, chunk_num)
+                                        except (ValueError, IndexError):
+                                            continue
+        
+        self.active_sessions[patient_id][session_id]['max_chunk'] = max_chunk
+        logger.info(f"Sesión finalizada: patient_id={patient_id}, session_id={session_id}, max_chunk={max_chunk}")
+        
+        return max_chunk
+
+    def register_chunk_completion(self, patient_id: str, session_id: str, camera_id: str, chunk_id: int):
+        """Registra que una cámara completó el procesamiento de un chunk"""
+        if patient_id not in self.active_sessions or session_id not in self.active_sessions[patient_id]:
+            logger.warning(f"Sesión no encontrada para chunk completion: patient_id={patient_id}, session_id={session_id}")
+            return False
+            
+        session_data = self.active_sessions[patient_id][session_id]
+        max_chunk = session_data['max_chunk']
+        
+        # Solo procesar si es el chunk final
+        if max_chunk == -1 or chunk_id != max_chunk:
+            return False
+            
+        session_data['completed_cameras'].add(camera_id)
+        logger.info(f"Chunk final completado: patient_id={patient_id}, session_id={session_id}, camera_id={camera_id}, chunk_id={chunk_id}")
+        logger.info(f"Cámaras completadas: {len(session_data['completed_cameras'])}/{session_data['cameras_count']}")
+        
+        # Verificar si todas las cámaras completaron el chunk final
+        if len(session_data['completed_cameras']) >= session_data['cameras_count']:
+            logger.info(f"¡Todas las cámaras completaron el chunk final! Iniciando ensemble para session_id={session_id}")
+            # Ejecutar ensemble en thread separado
+            threading.Thread(
+                target=self._process_session_ensemble_async,
+                args=(patient_id, session_id),
+                daemon=True
+            ).start()
+            return True
+            
+        return False
+
+    def _process_session_ensemble_async(self, patient_id: str, session_id: str):
+        """Procesa el ensemble de forma asíncrona"""
+        try:
+            self.process_session_ensemble(patient_id, session_id)
+            
+            # Limpiar sesión después del ensemble
+            if patient_id in self.active_sessions and session_id in self.active_sessions[patient_id]:
+                del self.active_sessions[patient_id][session_id]
+                if not self.active_sessions[patient_id]:
+                    del self.active_sessions[patient_id]
+                    
+        except Exception as e:
+            logger.error(f"Error en ensemble asíncrono: {e}")
+
     def process_session_ensemble(self, patient_id: str, session_id: str):
         """
         Procesar ensemble para toda la sesión cuando todas las cámaras han terminado
