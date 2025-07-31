@@ -87,24 +87,21 @@ class EnsembleProcessor:
             logger.warning(f"Sesión no encontrada para finalizar: patient_id={patient_id}, session_id={session_id}")
             return -1
         
-        # Buscar el chunk máximo para esta sesión en los datos procesados
-        processed_keypoints_path = self.base_data_dir / "processed" / "2D_keypoints" / f"patient{patient_id}" / f"session{session_id}"
+        # Buscar el chunk máximo para esta sesión en los datos sin procesar
+        unprocessed_session_path = self.base_data_dir / "unprocessed" / f"patient{patient_id}" / f"session{session_id}"
         max_chunk = -1
         
-        if processed_keypoints_path.exists():
-            for detector_name in ['vitpose', 'cspnet', 'hrnet']:
-                detector_path = processed_keypoints_path / detector_name
-                if detector_path.exists():
-                    for camera_folder in detector_path.iterdir():
-                        if camera_folder.is_dir() and camera_folder.name.startswith('camera'):
-                            coordinates_path = camera_folder / "coordinates"
-                            if coordinates_path.exists():
-                                for chunk_file in coordinates_path.glob("*.npy"):
-                                    try:
-                                        chunk_num = int(chunk_file.stem.split('_')[-1])
-                                        max_chunk = max(max_chunk, chunk_num)
-                                    except (ValueError, IndexError):
-                                        continue
+        if unprocessed_session_path.exists():
+            # Iterar por todas las carpetas de cámaras
+            for camera_folder in unprocessed_session_path.iterdir():
+                if camera_folder.is_dir() and camera_folder.name.startswith('camera'):
+                    # Buscar archivos de video (chunks) en cada cámara
+                    for chunk_file in camera_folder.glob("*.mp4"):
+                        try:
+                            chunk_num = int(chunk_file.stem)  # El nombre del archivo es el número de chunk
+                            max_chunk = max(max_chunk, chunk_num)
+                        except (ValueError, TypeError):
+                            continue
         
         self.active_sessions[patient_id][session_id]['max_chunk'] = max_chunk
         logger.info(f"Sesión finalizada: patient_id={patient_id}, session_id={session_id}, max_chunk={max_chunk}")
