@@ -542,17 +542,7 @@ def receive_chunk():
         patient_id = current_session['patient_id']
         session_id = current_session['session_id']
         
-        save_dir = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}" / f"camera{camera_id}"
-        save_dir.mkdir(parents=True, exist_ok=True)
-        
-        filename = f"{chunk_number}.mp4"
-        file_path = save_dir / filename
-        
-        file.save(str(file_path))
-        
-        logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
-
-        # Verificar integridad de cámaras cuando llegue el chunk 2 por primera vez
+        # Verificar integridad de cámaras cuando llegue el chunk 2 por primera vez ANTES de guardar
         global chunk_2_verified
         if chunk_number == 2 and not chunk_2_verified:
             chunk_2_verified = True
@@ -567,6 +557,16 @@ def receive_chunk():
                     'message': 'Fallo crítico de cámaras detectado. Sesión cancelada automáticamente.',
                     'action_required': 'Desconectar y conectar el switch de las cámaras antes de intentar una nueva grabación.'
                 }), 500
+        
+        save_dir = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}" / f"camera{camera_id}"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        
+        filename = f"{chunk_number}.mp4"
+        file_path = save_dir / filename
+        
+        file.save(str(file_path))
+        
+        logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
         # Inicializar coordinator al recibir el primer chunk (solo una vez, thread-safe)
         with coordinator_lock:
