@@ -51,3 +51,10 @@ class HRNetDetector(BasePoseDetector):
             "right_pinky_finger_1", "right_pinky_finger_2", "right_pinky_finger_3", "right_pinky_finger_4",
             "right_hand_root"
         ]
+        
+        # Ponderaciones de confianza para ensemble: peso 1 para COCO + pies, 0 para resto
+        self.ensemble_confidence_weights = (
+            [1.0] * 17 +  # COCO body keypoints
+            [1.0] * 6 +   # Foot keypoints
+            [0.0] * 110   # Face + hands (ignorar para ensemble)
+        )

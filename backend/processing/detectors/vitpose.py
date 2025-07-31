@@ -18,3 +18,6 @@ class VitPoseDetector(BasePoseDetector):
             "left_wrist", "right_wrist", "left_hip", "right_hip",
             "left_knee", "right_knee", "left_ankle", "right_ankle"
         ]
+        
+        # Ponderaciones de confianza para ensemble: VitPose x3 para COCO
+        self.ensemble_confidence_weights = [3.0] * 17

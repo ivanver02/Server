@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # Importar configuraciones
 from config import server_config, data_config, gpu_config
 from backend.processing.coordinator import PoseProcessingCoordinator
+from backend.processing.ensemble import EnsembleProcessor
 
 # Crear aplicación Flask
 app = Flask(__name__)
@@ -35,6 +36,9 @@ data_config.ensure_directories()
 
 # Inicializar coordinador de procesamiento
 pose_coordinator = PoseProcessingCoordinator()
+
+# Inicializar procesador de ensemble
+ensemble_processor = EnsembleProcessor(data_config.base_data_dir)
 
 # Lock para evitar múltiples inicializaciones concurrentes
 coordinator_lock = threading.Lock()
@@ -452,6 +456,15 @@ def end_session():
         
         # No eliminar datos, solo marcar sesión como finalizada
         logger.info(f"Sesión finalizada normalmente - Paciente: {patient_id}, Sesión: {session_id}")
+        
+        # Procesar ensemble directamente ahora que la sesión terminó
+        try:
+            logger.info("🎬 Iniciando procesamiento de ensemble para sesión completada")
+            ensemble_processor.process_session_ensemble(patient_id, session_id)
+            logger.info("✅ Procesamiento de ensemble completado")
+        except Exception as e:
+            logger.error(f"Error procesando ensemble: {e}")
+            # No fallar la finalización de sesión si ensemble falla
         
         old_session = current_session.copy()
         current_session.update({
