@@ -168,12 +168,12 @@ class BasePoseDetector(ABC):
                     scores = np.array(results['predictions'][0][0]['keypoint_scores'])
                     
                     # Guardar archivos
-                    filename = f"{chunk_id}_{frame_idx}"
+                    filename = f"{frame_idx}_{chunk_id}"
                     np.save(coordinates_dir / f"{filename}.npy", keypoints)
                     np.save(confidence_dir / f"{filename}.npy", scores)
                 else:
                     # Si no hay detecciones, guardar arrays vacíos
-                    filename = f"{chunk_id}_{frame_idx}"
+                    filename = f"{frame_idx}_{chunk_id}"
                     num_keypoints = len(self.keypoints_names) if self.keypoints_names else 17
                     empty_keypoints = np.zeros((num_keypoints, 2))  # N keypoints, 2 coordenadas
                     empty_scores = np.zeros(num_keypoints)  # N scores

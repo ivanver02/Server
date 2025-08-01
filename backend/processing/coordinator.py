@@ -23,7 +23,7 @@ class PoseProcessingCoordinator:
         """Inicializar coordinador con todos los detectores disponibles"""
         self.detectors = [
             VitPoseDetector(),
-            # MSPNDetector(),  # Comentado - no ejecutar MSPN
+            # MSPNDetector(),
             HRNetDetector(),
             CSPDetector()
         ]

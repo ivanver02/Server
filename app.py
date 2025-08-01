@@ -69,10 +69,10 @@ def _check_camera_chunks_integrity(patient_id: str, session_id: str, cameras_cou
             chunk_0_file = camera_dir / "0.mp4"
             
             if not chunk_0_file.exists():
-                logger.error(f"🚨 FALLO DE CÁMARAS: La cámara {camera_id} NO tiene chunk 0")
+                logger.error(f" FALLO DE CÁMARAS: La cámara {camera_id} NO tiene chunk 0")
                 return False
         
-        logger.info(f"✅ Verificación de integridad OK: Todas las {cameras_count} cámaras tienen chunk 0")
+        logger.info(f" Verificación de integridad OK: Todas las {cameras_count} cámaras tienen chunk 0")
         return True
         
     except Exception as e:
@@ -90,7 +90,7 @@ def _cancel_session_due_to_camera_failure():
         patient_id = current_session['patient_id']
         session_id = current_session['session_id']
         
-        logger.error("🚨🔌 CANCELANDO SESIÓN POR FALLO DE CÁMARAS - DESCONECTAR Y CONECTAR EL SWITCH 🔌🚨")
+        logger.error("🔌 CANCELANDO SESIÓN POR FALLO DE CÁMARAS - DESCONECTAR Y CONECTAR EL SWITCH 🔌")
         
         # Detener coordinador si está inicializado
         if pose_coordinator.initialized:
@@ -339,7 +339,7 @@ def start_session():
                 'cameras_count': 0
             })
             
-            logger.info(f"✅ Sesión anterior finalizada automáticamente: patient{old_patient_id}/session{old_session_id}")
+            logger.info(f" Sesión anterior finalizada automáticamente: patient{old_patient_id}/session{old_session_id}")
         
         # Crear directorios para la nueva sesión
         session_dirs = []
@@ -464,7 +464,7 @@ def end_session():
         
         # El ensemble se procesará automáticamente cuando todas las cámaras completen el chunk final
         if max_chunk >= 0:
-            logger.info(f"🎬 Esperando que todas las cámaras completen el chunk final {max_chunk} para iniciar ensemble")
+            logger.info(f" Esperando que todas las cámaras completen el chunk final {max_chunk} para iniciar ensemble")
         else:
             logger.warning("No se encontraron chunks para procesar en ensemble")
         
@@ -557,15 +557,15 @@ def receive_chunk():
         patient_id = current_session['patient_id']
         session_id = current_session['session_id']
         
-        # Verificar integridad de cámaras cuando llegue el chunk 2 por primera vez ANTES de guardar
+        # Comprobación de que las cámaras están grabando bien (cuando llega un chunk 2, que hay al menos chunk 0 de todas)
         global chunk_2_verified
         if chunk_number == 2 and not chunk_2_verified:
             chunk_2_verified = True
-            logger.info("🔍 Verificando integridad de chunks de cámaras al recibir chunk 2...")
+            logger.info("Verificando integridad de chunks de cámaras al recibir chunk 2...")
             
             integrity_ok = _check_camera_chunks_integrity(patient_id, session_id, current_session['cameras_count'])
             if not integrity_ok:
-                logger.error("🚨 FALLO DE CÁMARAS DETECTADO - Algunas cámaras no enviaron chunks correctamente")
+                logger.error(" FALLO DE CÁMARAS DETECTADO - Algunas cámaras no enviaron chunks correctamente")
                 _cancel_session_due_to_camera_failure()
                 return jsonify({
                     'error': 'CAMERA_FAILURE_DETECTED',
@@ -583,7 +583,7 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # Inicializar coordinator al recibir el primer chunk (solo una vez, thread-safe)
+        # Inicializar solo una vez el coordinador de los detectores 2D
         with coordinator_lock:
             if not pose_coordinator.initialized:
                 logger.info("Inicializando coordinador de procesamiento de pose...")
@@ -598,13 +598,13 @@ def receive_chunk():
         
         # Procesar todos los chunks de todas las cámaras
         processing_results = None
-        logger.info(f"🎯 Procesando chunk {chunk_number} de cámara {camera_id}")
+        logger.info(f" Procesando chunk {chunk_number} de cámara {camera_id}")
         
-        # Usar semáforo para permitir chunks procesándose simultáneamente según configuración
+        # Usar semáforo para permitir chunks procesándose simultáneamente según configuración (1 o 2 GPUs)
         with processing_semaphore:
-            logger.info(f"🔒 Iniciando procesamiento paralelo de chunk {chunk_number} cámara {camera_id} (máximo {gpu_config.max_concurrent_chunks} simultáneos)")
+            logger.info(f" Iniciando procesamiento paralelo de chunk {chunk_number} cámara {camera_id} (máximo {gpu_config.max_concurrent_chunks} simultáneos)")
             
-            # Procesar chunk directamente con todos los detectores
+            # Procesar este chunk con todos los detectores
             chunk_id = str(chunk_number)
             processing_results = pose_coordinator.process_chunk(
                 video_path=file_path,
@@ -615,15 +615,15 @@ def receive_chunk():
             )
             
             success_count = sum(processing_results.values())
-            logger.info(f"✅ Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
-            logger.info(f"🔓 Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
+            logger.info(f" Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
+            logger.info(f" Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
             
             # Registrar finalización del chunk en ensemble processor
             chunk_completed = ensemble_processor.register_chunk_completion(
                 patient_id, session_id, f"camera{camera_id}", chunk_number
             )
             if chunk_completed:
-                logger.info(f"🎬 ¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
+                logger.info(f" ¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
 
         response_data = {
             'status': 'chunk_received',

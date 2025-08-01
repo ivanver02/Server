@@ -91,7 +91,7 @@ class EnsembleProcessor:
             logger.warning(f"Sesión no encontrada para finalizar: patient_id={patient_id}, session_id={session_id}")
             return -1
         
-        # Buscar el chunk máximo para esta sesión en los datos sin procesar
+        # Buscar el chunk máximo recibido
         unprocessed_session_path = self.base_data_dir / "unprocessed" / f"patient{patient_id}" / f"session{session_id}"
         max_chunk = -1
         
@@ -136,18 +136,18 @@ class EnsembleProcessor:
             # Ejecutar ensemble en thread separado
             threading.Thread(
                 target=self._process_session_ensemble_async,
-                args=(patient_id, session_id),
+                args=(patient_id, session_id, max_chunk),
                 daemon=True
             ).start()
             return True
             
         return False
 
-    def _process_session_ensemble_async(self, patient_id: str, session_id: str):
+    def _process_session_ensemble_async(self, patient_id: str, session_id: str, max_chunk: int):
         """Procesa el ensemble de forma asíncrona"""
         try:
-            self.process_session_ensemble(patient_id, session_id)
-            
+            self.process_session_ensemble(patient_id, session_id, max_chunk)
+
             # Limpiar sesión después del ensemble
             if patient_id in self.active_sessions and session_id in self.active_sessions[patient_id]:
                 del self.active_sessions[patient_id][session_id]
@@ -157,12 +157,12 @@ class EnsembleProcessor:
         except Exception as e:
             logger.error(f"Error en ensemble asíncrono: {e}")
 
-    def process_session_ensemble(self, patient_id: str, session_id: str):
+    def process_session_ensemble(self, patient_id: str, session_id: str, max_chunk: int):
         """
         Procesar ensemble para toda la sesión cuando todas las cámaras han terminado
         """
         try:
-            logger.info(f"🎯 Iniciando ensemble para sesión completa: patient{patient_id}/session{session_id}")
+            logger.info(f" Iniciando ensemble para sesión completa: patient{patient_id}/session{session_id}")
             
             # Obtener lista de cámaras y encontrar el chunk máximo
             unprocessed_session = self.base_data_dir / "unprocessed" / f"patient{patient_id}" / f"session{session_id}"
@@ -172,17 +172,9 @@ class EnsembleProcessor:
                 logger.warning("No se encontraron directorios de cámaras")
                 return
             
-            # Encontrar el chunk máximo
-            max_chunk = self._find_max_chunk(patient_id, session_id)
-            if max_chunk < 0:
-                logger.warning("No se encontraron chunks para procesar")
-                return
-            
-            total_processed = 0
-            
             # Procesar ensemble para cada chunk y cada cámara
             for chunk_num in range(max_chunk + 1):
-                logger.info(f"🔄 Procesando chunk {chunk_num}/{max_chunk}")
+                logger.info(f" Procesando chunk {chunk_num}/{max_chunk}")
                 chunk_processed_count = 0
                 
                 for camera_dir in camera_dirs:
@@ -193,35 +185,18 @@ class EnsembleProcessor:
                         chunk_processed_count += 1
                         total_processed += 1
                 
-                logger.info(f"✅ Chunk {chunk_num} completado: {chunk_processed_count}/{len(camera_dirs)} cámaras procesadas")
+                logger.info(f" Chunk {chunk_num} completado: {chunk_processed_count}/{len(camera_dirs)} cámaras procesadas")
             
-            logger.info(f"✅ Ensemble completado: {total_processed} chunks procesados para sesión {session_id} ({max_chunk + 1} chunks × {len(camera_dirs)} cámaras)")
+            logger.info(f" Ensemble completado: {total_processed} chunks procesados para sesión {session_id} ({max_chunk + 1} chunks × {len(camera_dirs)} cámaras)")
             
         except Exception as e:
             logger.error(f"Error procesando ensemble de sesión: {e}")
-    
-    def _find_max_chunk(self, patient_id: str, session_id: str) -> int:
-        """Encontrar el chunk máximo en los directorios sin procesar"""
-        max_chunk = -1
-        session_dir = self.base_data_dir / "unprocessed" / f"patient{patient_id}" / f"session{session_id}"
-        
-        camera_dirs = list(session_dir.glob("camera*"))
-        for camera_dir in camera_dirs:
-            if camera_dir.is_dir():
-                chunk_files = list(camera_dir.glob("*.mp4"))
-                for chunk_file in chunk_files:
-                    try:
-                        chunk_num = int(chunk_file.stem)
-                        max_chunk = max(max_chunk, chunk_num)
-                    except ValueError:
-                        continue
-        
-        return max_chunk
     
     def _process_chunk_ensemble(self, patient_id: str, session_id: str, camera_id: int, chunk_number: int) -> bool:
         """Procesar ensemble para un chunk específico de una cámara"""
         try:
             # Obtener todos los archivos frame_chunk.npy de todos los detectores para este chunk
+            # Estructura: {frame_number: {detector_name: keypoints}}
             all_frame_files = self._get_all_frame_files(patient_id, session_id, camera_id, chunk_number)
             
             if not all_frame_files:
@@ -231,17 +206,18 @@ class EnsembleProcessor:
             total_processed = 0
             total_skipped = 0
             
-            logger.info(f"📁 Procesando {len(all_frame_files)} frames para chunk {chunk_number}, cámara {camera_id}")
+            logger.info(f" Procesando {len(all_frame_files)} frames para chunk {chunk_number}, cámara {camera_id}")
             
-            # Procesar cada archivo frame_chunk.npy individualmente
+            # Procesar cada frame para los distintos detectores
             for frame_number in sorted(all_frame_files.keys()):
+                # Estructura de frame_data: {detector_name: keypoints}
                 frame_data = all_frame_files[frame_number]
                 
-                logger.debug(f"🔍 Frame {frame_number}: disponible en {len(frame_data)} detectores: {list(frame_data.keys())}")
+                logger.debug(f" Frame {frame_number}: disponible en {len(frame_data)} detectores: {list(frame_data.keys())}")
                 
                 # Verificar que tenemos suficientes detectores para este frame
                 if len(frame_data) < ensemble_config.min_detectors_required:
-                    logger.debug(f"⚠️ Frame {frame_number} omitido: solo {len(frame_data)} detectores (mínimo: {ensemble_config.min_detectors_required})")
+                    logger.debug(f" Frame {frame_number} omitido: solo {len(frame_data)} detectores (mínimo: {ensemble_config.min_detectors_required})")
                     total_skipped += 1
                     continue
                 
@@ -251,12 +227,12 @@ class EnsembleProcessor:
                     # Guardar resultado individual frame_chunk.npy
                     self._save_single_frame_result(ensemble_result, patient_id, session_id, camera_id, frame_number, chunk_number)
                     total_processed += 1
-                    logger.debug(f"✅ Frame {frame_number} procesado y guardado")
+                    logger.debug(f" Frame {frame_number} procesado y guardado")
                 else:
-                    logger.debug(f"❌ Frame {frame_number} falló en combinación")
+                    logger.debug(f" Frame {frame_number} falló en combinación")
                     total_skipped += 1
             
-            logger.info(f"✅ Chunk {chunk_number}, cámara {camera_id}: {total_processed} frames procesados, {total_skipped} omitidos")
+            logger.info(f" Chunk {chunk_number}, cámara {camera_id}: {total_processed} frames procesados, {total_skipped} omitidos")
             return total_processed > 0
             
         except Exception as e:
@@ -264,10 +240,13 @@ class EnsembleProcessor:
             return False
     
     def _get_all_frame_files(self, patient_id: str, session_id: str, camera_id: int, chunk_number: int) -> Dict:
-        """Obtener todos los archivos frame_chunk.npy organizados por frame number"""
+        """
+        Obtener todos los archivos frame_chunk.npy organizados por frame number
+        Devuelve un diccionario {frame_number: {detector_name: keypoints}}
+        """
+
         frame_files = {}
         
-        # Los keypoints están en unprocessed
         keypoints_base = self.base_data_dir / "unprocessed" / f"patient{patient_id}" / f"session{session_id}" / "keypoints2D"
         logger.debug(f"Buscando keypoints en: {keypoints_base}")
         
@@ -278,7 +257,7 @@ class EnsembleProcessor:
                 logger.debug(f"No existe directorio para detector {detector_name}: {detector_dir}")
                 continue
                 
-            # Buscar TODOS los archivos de este chunk - formato: frame_chunk.npy (ej: 120_3.npy)
+            # Buscar todos los archivos de este chunk
             chunk_files = list(detector_dir.glob(f"*_{chunk_number}.npy"))
             logger.debug(f"Detector {detector_name}, chunk {chunk_number}: encontrados {len(chunk_files)} archivos")
             
@@ -308,12 +287,11 @@ class EnsembleProcessor:
                                 camera_id: int, frame_number: int, chunk_number: int):
         """Guardar resultado de un frame individual como frame_chunk.npy"""
         try:
-            # Guardar en processed, directamente en la carpeta de la cámara (sin subcarpetas)
+            # Guardar en el directorio de los keypoints 2D procesados
             output_dir = (self.base_data_dir / "processed" / "2D_keypoints" / 
                          f"patient{patient_id}" / f"session{session_id}" / f"camera{camera_id}")
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Formato: frame_chunk.npy (ej: 120_3.npy)
             output_file = output_dir / f"{frame_number}_{chunk_number}.npy"
             np.save(output_file, keypoints)
             
@@ -326,6 +304,7 @@ class EnsembleProcessor:
         """
         Combinar keypoints usando las ponderaciones de confianza especificadas
         Solo incluye keypoints con confianza mayor al umbral configurado
+        Estructura de frame_keypoints: { detector_name: keypoints_array }
         Resultado: array de forma (len(final_keypoint_names), 2)
         """
         try:
