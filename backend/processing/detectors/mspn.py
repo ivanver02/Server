@@ -1,6 +1,3 @@
-"""
-Detector MSPN para análisis de pose
-"""
 from .base import BasePoseDetector
 
 

@@ -1,6 +1,3 @@
-"""
-Detectores de pose para análisis de marcha
-"""
 from .base import BasePoseDetector
 from .vitpose import VitPoseDetector
 from .mspn import MSPNDetector

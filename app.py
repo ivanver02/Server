@@ -1,14 +1,6 @@
-"""
-API principal Flask para el servidor de procesamiento de video
-Sistema de análisis de marcha para detección de gonartrosis
-"""
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
-import json
-import numpy as np
-from pathlib import Path
-from typing import Dict
 import threading
 
 # Configurar logging
@@ -46,7 +38,7 @@ coordinator_lock = threading.Lock()
 # Semáforo para permitir chunks procesándose simultáneamente según configuración GPU
 processing_semaphore = threading.Semaphore(gpu_config.max_concurrent_chunks)
 
-# Variable global para sesión actual
+# Variable global para sesión actual (puede haber hasta una grabando, pero varias procesando chunks)
 current_session = {
     'patient_id': None,
     'session_id': None,
@@ -57,245 +49,21 @@ current_session = {
 # Variable para controlar si ya verificamos el chunk 2
 chunk_2_verified = False
 
-def _check_camera_chunks_integrity(patient_id: str, session_id: str, cameras_count: int):
-    """
-    Verificar que todas las cámaras tengan al menos el chunk 0
-    """
-    try:
-        session_base = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
-        
-        for camera_id in range(cameras_count):
-            camera_dir = session_base / f"camera{camera_id}"
-            chunk_0_file = camera_dir / "0.mp4"
-            
-            if not chunk_0_file.exists():
-                logger.error(f" FALLO DE CÁMARAS: La cámara {camera_id} NO tiene chunk 0")
-                return False
-        
-        logger.info(f" Verificación de integridad OK: Todas las {cameras_count} cámaras tienen chunk 0")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error verificando integridad de chunks: {e}")
-        return False
-
-def _cancel_session_due_to_camera_failure():
-    """
-    Cancelar sesión debido a fallo de cámaras
-    """
-    try:
-        if not current_session['is_active']:
-            return
-        
-        patient_id = current_session['patient_id']
-        session_id = current_session['session_id']
-        
-        logger.error("🔌 CANCELANDO SESIÓN POR FALLO DE CÁMARAS - DESCONECTAR Y CONECTAR EL SWITCH 🔌")
-        
-        # Detener coordinador si está inicializado
-        if pose_coordinator.initialized:
-            logger.info("Deteniendo coordinador de procesamiento...")
-        
-        # Limpiar directorios de la sesión cancelada
-        session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
-        
-        if session_path.exists():
-            import shutil
-            shutil.rmtree(session_path)
-            logger.info(f"Directorio de sesión eliminado: {session_path}")
-        
-        # También limpiar datos procesados si existen
-        processed_paths = [
-            data_config.photos_dir / f"patient{patient_id}" / f"session{session_id}",
-            data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}",
-            data_config.keypoints_3d_dir / f"patient{patient_id}" / f"session{session_id}"
-        ]
-        
-        for path in processed_paths:
-            if path.exists():
-                import shutil
-                shutil.rmtree(path)
-                logger.info(f"Directorio procesado eliminado: {path}")
-        
-        # Reiniciar sesión
-        logger.info(f"Sesión cancelada por fallo de cámaras - Paciente: {patient_id}, Sesión: {session_id}")
-        
-        current_session.update({
-            'patient_id': None,
-            'session_id': None,
-            'is_active': False,
-            'cameras_count': 0
-        })
-        
-        # Reiniciar flag de verificación
-        global chunk_2_verified
-        chunk_2_verified = False
-        
-    except Exception as e:
-        logger.error(f"Error cancelando sesión por fallo de cámaras: {str(e)}")
-
-'''
-def _check_and_trigger_3d_reconstruction(patient_id: str, session_id: str, chunk_number: int):
-    """
-    Verificar si tenemos todos los keypoints 2D necesarios para reconstrucción 3D
-    y activar triangulación si están disponibles
-    """
-    try:
-        # Verificar si tenemos keypoints 2D procesados de todas las cámaras para este chunk
-        session_base = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}"
-        
-        # Verificar resultados de procesamiento 2D
-        keypoints_available = True
-        camera_keypoints = {}
-        
-        # Calcular global_frame (mismo cálculo que en el coordinador)
-        global_frame_base = chunk_number * 1000  # Frames base para este chunk
-        
-        for camera_id in range(current_session['cameras_count']):
-            camera_dir = session_base / f"camera{camera_id}"
-            
-            if camera_dir.exists():
-                # Buscar archivos de keypoints .npy para este chunk
-                keypoint_files = list(camera_dir.glob(f"{global_frame_base}*_*.npy"))
-                # Filtrar solo archivos de keypoints (no confidence)
-                keypoint_files = [f for f in keypoint_files if "_confidence" not in f.name]
-                
-                if keypoint_files:
-                    camera_keypoints[camera_id] = keypoint_files
-                    logger.debug(f"Cámara {camera_id}: {len(keypoint_files)} archivos de keypoints encontrados")
-                else:
-                    keypoints_available = False
-                    logger.debug(f"Cámara {camera_id}: No se encontraron keypoints para chunk {chunk_number}")
-                    break
-            else:
-                keypoints_available = False
-                logger.debug(f"Directorio cámara {camera_id} no existe")
-                break
-        
-        if keypoints_available and len(camera_keypoints) == current_session['cameras_count']:
-            logger.info(f"🔺 Iniciando reconstrucción 3D para chunk {chunk_number}")
-            
-            # Llamar al triangulador
-            try:
-                triangulator = Triangulator()
-                
-                # Configurar triangulador (por ahora simple, sin cámaras calibradas)
-                result_3d = _triangulate_chunk_simple(
-                    triangulator, camera_keypoints, patient_id, session_id, chunk_number
-                )
-                
-                if result_3d:
-                    logger.info(f"Reconstrucción 3D completada para chunk {chunk_number}")
-                else:
-                    logger.warning(f"⚠️  Reconstrucción 3D falló para chunk {chunk_number}")
-                    
-            except Exception as triangulation_error:
-                logger.error(f"Error en triangulación: {triangulation_error}")
-        else:
-            logger.debug(f"Reconstrucción 3D no disponible aún para chunk {chunk_number}: "
-                        f"{len(camera_keypoints)}/{current_session['cameras_count']} cámaras")
-            
-    except Exception as e:
-        logger.error(f"Error verificando reconstrucción 3D: {e}")
-
-
-def _triangulate_chunk_simple(triangulator: Triangulator, camera_keypoints: Dict[int, list], 
-                            patient_id: str, session_id: str, chunk_number: int) -> bool:
-    """
-    Realizar triangulación simple para un chunk
-    """
-    try:
-        from config import data_config
-        
-        # Procesar cada frame del chunk
-        processed_frames = 0
-        
-        # Agrupar archivos por global_frame
-        frames_data = {}
-        
-        for camera_id, keypoint_files in camera_keypoints.items():
-            for file_path in keypoint_files:
-                # Extraer global_frame del nombre del archivo
-                filename = file_path.stem  # Nombre sin extensión
-                parts = filename.split('_')
-                if len(parts) >= 2:
-                    global_frame = int(parts[0])
-                    detector_name = '_'.join(parts[1:])
-                    
-                    if global_frame not in frames_data:
-                        frames_data[global_frame] = {}
-                    
-                    if camera_id not in frames_data[global_frame]:
-                        frames_data[global_frame][camera_id] = {}
-                    
-                    # Cargar keypoints
-                    keypoints = np.load(file_path)
-                    frames_data[global_frame][camera_id][detector_name] = keypoints
-        
-        # Procesar cada frame
-        results_3d = []
-        
-        for global_frame, cameras_data in frames_data.items():
-            if len(cameras_data) == current_session['cameras_count']:  # Todas las cámaras disponibles
-                
-                # Por simplicidad, usar el primer detector disponible
-                detector_names = set()
-                for cam_data in cameras_data.values():
-                    detector_names.update(cam_data.keys())
-                
-                if detector_names:
-                    primary_detector = list(detector_names)[0]
-                    
-                    # Extraer keypoints de todas las cámaras para este detector
-                    multi_camera_keypoints = {}
-                    for camera_id, cam_data in cameras_data.items():
-                        if primary_detector in cam_data:
-                            multi_camera_keypoints[camera_id] = cam_data[primary_detector]
-                    
-                    if len(multi_camera_keypoints) >= 2:  # Mínimo 2 cámaras para triangulación
-                        # Triangulación simple (placeholder)
-                        # TODO: Implementar triangulación real cuando tengamos calibración
-                        
-                        # Guardar resultado 3D en .json
-                        output_dir = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}" / "3D"
-                        output_dir.mkdir(parents=True, exist_ok=True)
-                        
-                        result_3d_data = {
-                            'patient_id': patient_id,
-                            'session_id': session_id,
-                            'chunk_number': chunk_number,
-                            'global_frame': global_frame,
-                            'timestamp': global_frame / 30.0,  # Asumiendo 30 FPS para timestamp aproximado
-                            'detector_used': primary_detector,
-                            'cameras_used': list(multi_camera_keypoints.keys()),
-                            'num_cameras': len(multi_camera_keypoints),
-                            'triangulation_method': 'simple_placeholder',
-                            'points_3d_shape': [len(list(multi_camera_keypoints.values())[0]), 3],
-                            'status': 'placeholder_generated'
-                        }
-                        
-                        output_file = output_dir / f"frame_{global_frame}_3d.json"
-                        with open(output_file, 'w') as f:
-                            json.dump(result_3d_data, f, indent=2)
-                        
-                        processed_frames += 1
-                        results_3d.append(output_file)
-        
-        logger.info(f"💎 Triangulación completada: {processed_frames} frames procesados para chunk {chunk_number}")
-        return processed_frames > 0
-        
-    except Exception as e:
-        logger.error(f"Error en triangulación simple: {e}")
-        return False
-'''
-
 @app.route('/health', methods=['GET'])
 def health_check():
     """Endpoint de salud del servidor"""
     return jsonify({
         'status': 'healthy',
-        'service': 'gonarthrosis-analysis-server',
+        'service': 'gait-analysis-server',
         'version': '1.0.0'
+    })
+
+@app.route('/api/session/status', methods=['GET'])
+def get_session_status():
+    """Obtener estado de la sesión actual"""
+    return jsonify({
+        'session_active': current_session['is_active'],
+        'current_session': current_session if current_session['is_active'] else None
     })
 
 @app.route('/api/session/start', methods=['POST'])
@@ -303,7 +71,7 @@ def start_session():
     """
     Iniciar nueva sesión de procesamiento
     
-    Body:
+    Se reciben datos con el siguiente formato:
     {
         "patient_id": "string",
         "session_id": "string", 
@@ -325,7 +93,7 @@ def start_session():
         
         # Verificar si ya hay una sesión activa y finalizarla automáticamente
         if current_session['is_active']:
-            logger.info(f"🔄 Sesión activa detectada, finalizando automáticamente: "
+            logger.info(f"Sesión activa detectada, finalizando automáticamente: "
                        f"patient{current_session['patient_id']}/session{current_session['session_id']}")
             
             # Finalizar sesión anterior automáticamente (sin eliminar datos)
@@ -339,7 +107,7 @@ def start_session():
                 'cameras_count': 0
             })
             
-            logger.info(f" Sesión anterior finalizada automáticamente: patient{old_patient_id}/session{old_session_id}")
+            logger.info(f"Sesión anterior finalizada automáticamente: patient{old_patient_id}/session{old_session_id}")
         
         # Crear directorios para la nueva sesión
         session_dirs = []
@@ -359,7 +127,7 @@ def start_session():
         # Registrar sesión en ensemble processor
         ensemble_processor.register_session_start(patient_id, session_id, cameras_count)
         
-        # Reiniciar flag de verificación de chunk 2
+        # Reiniciar flag de verificación de chunk 2. Esto es para cuando las cámaras fallan, que algunas graban chunks y otras no. Si se recibe el primer chunk 2, se verificará que todas las cámaras tengan al menos el chunk 0.
         global chunk_2_verified
         chunk_2_verified = False
         
@@ -376,19 +144,11 @@ def start_session():
     except Exception as e:
         logger.error(f"Error iniciando sesión: {str(e)}")
         return jsonify({'error': f'Failed to start session: {str(e)}'}), 500
-
-@app.route('/api/session/status', methods=['GET'])
-def get_session_status():
-    """Obtener estado de la sesión actual"""
-    return jsonify({
-        'session_active': current_session['is_active'],
-        'current_session': current_session if current_session['is_active'] else None
-    })
-
+    
 @app.route('/api/session/cancel', methods=['POST'])
 def cancel_session():
     """
-    Cancelar sesión actual y limpiar datos
+    Cancelar sesión y grabación actual y limpiar datos
     """
     try:
         if not current_session['is_active']:
@@ -444,6 +204,7 @@ def cancel_session():
     except Exception as e:
         logger.error(f"Error cancelando sesión: {str(e)}")
         return jsonify({'error': f'Failed to cancel session: {str(e)}'}), 500
+    
 
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
@@ -464,7 +225,7 @@ def end_session():
         
         # El ensemble se procesará automáticamente cuando todas las cámaras completen el chunk final
         if max_chunk >= 0:
-            logger.info(f" Esperando que todas las cámaras completen el chunk final {max_chunk} para iniciar ensemble")
+            logger.info(f"Esperando que todas las cámaras completen el chunk final {max_chunk} para iniciar ensemble")
         else:
             logger.warning("No se encontraron chunks para procesar en ensemble")
         
@@ -489,29 +250,82 @@ def end_session():
         logger.error(f"Error finalizando sesión: {str(e)}")
         return jsonify({'error': f'Failed to end session: {str(e)}'}), 500
 
-@app.route('/api/gpu/status', methods=['GET'])
-def get_gpu_status():
+def _check_camera_chunks_integrity(patient_id: str, session_id: str, cameras_count: int):
     """
-    Obtener estado actual de las GPUs
+    Verificar que todas las cámaras tengan al menos el chunk 0
     """
     try:
-        if not pose_coordinator.initialized:
-            return jsonify({
-                'coordinator_initialized': False,
-                'message': 'Pose coordinator not initialized'
-            })
+        session_base = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
         
-        gpu_status = pose_coordinator.get_gpu_status()
+        for camera_id in range(cameras_count):
+            camera_dir = session_base / f"camera{camera_id}"
+            chunk_0_file = camera_dir / "0.mp4"
+            
+            if not chunk_0_file.exists():
+                logger.error(f" FALLO DE CÁMARAS: La cámara {camera_id} NO tiene chunk 0")
+                return False
         
-        return jsonify({
-            'coordinator_initialized': True,
-            'gpu_status': gpu_status,
-            'processing_mode': gpu_status.get('mode', 'unknown')
-        })
+        logger.info(f" Verificación de integridad OK: Todas las {cameras_count} cámaras tienen chunk 0")
+        return True
         
     except Exception as e:
-        logger.error(f"Error obteniendo estado de GPU: {str(e)}")
-        return jsonify({'error': f'Failed to get GPU status: {str(e)}'}), 500
+        logger.error(f"Error verificando integridad de chunks: {e}")
+        return False
+
+def _cancel_session_due_to_camera_failure():
+    """
+    Cancelar sesión debido a fallo de cámaras
+    """
+    try:
+        if not current_session['is_active']:
+            return
+        
+        patient_id = current_session['patient_id']
+        session_id = current_session['session_id']
+        
+        logger.error("CANCELANDO SESIÓN POR FALLO DE CÁMARAS - DESCONECTAR Y CONECTAR EL SWITCH, Y REINICIAR LOS SERVIDORES DE FLASK, VOLVIENDO A ABRIR EL FRONTEND")
+        
+        # Detener coordinador si está inicializado
+        if pose_coordinator.initialized:
+            logger.info("Deteniendo coordinador de procesamiento...")
+        
+        # Limpiar directorios de la sesión cancelada
+        session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+        
+        if session_path.exists():
+            import shutil
+            shutil.rmtree(session_path)
+            logger.info(f"Directorio de sesión eliminado: {session_path}")
+        
+        # También limpiar datos procesados si existen
+        processed_paths = [
+            data_config.photos_dir / f"patient{patient_id}" / f"session{session_id}",
+            data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}",
+            data_config.keypoints_3d_dir / f"patient{patient_id}" / f"session{session_id}"
+        ]
+        
+        for path in processed_paths:
+            if path.exists():
+                import shutil
+                shutil.rmtree(path)
+                logger.info(f"Directorio procesado eliminado: {path}")
+        
+        # Reiniciar sesión
+        logger.info(f"Sesión cancelada por fallo de cámaras - Paciente: {patient_id}, Sesión: {session_id}")
+        
+        current_session.update({
+            'patient_id': None,
+            'session_id': None,
+            'is_active': False,
+            'cameras_count': 0
+        })
+        
+        # Reiniciar flag de verificación
+        global chunk_2_verified
+        chunk_2_verified = False
+        
+    except Exception as e:
+        logger.error(f"Error cancelando sesión por fallo de cámaras: {str(e)}")
 
 @app.route('/api/chunks/receive', methods=['POST'])
 def receive_chunk():
@@ -557,7 +371,7 @@ def receive_chunk():
         patient_id = current_session['patient_id']
         session_id = current_session['session_id']
         
-        # Comprobación de que las cámaras están grabando bien (cuando llega un chunk 2, que hay al menos chunk 0 de todas)
+        # Comprobación de que las cámaras están grabando bien (cuando llega un chunk 2, que tenemos al menos el chunk 0 de todas)
         global chunk_2_verified
         if chunk_number == 2 and not chunk_2_verified:
             chunk_2_verified = True
@@ -565,7 +379,7 @@ def receive_chunk():
             
             integrity_ok = _check_camera_chunks_integrity(patient_id, session_id, current_session['cameras_count'])
             if not integrity_ok:
-                logger.error(" FALLO DE CÁMARAS DETECTADO - Algunas cámaras no enviaron chunks correctamente")
+                logger.error("FALLO DE CÁMARAS DETECTADO - Algunas cámaras no enviaron chunks correctamente")
                 _cancel_session_due_to_camera_failure()
                 return jsonify({
                     'error': 'CAMERA_FAILURE_DETECTED',
@@ -583,7 +397,7 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # Inicializar solo una vez el coordinador de los detectores 2D
+        # Inicializar solo una vez el coordinador de los detectores 2D (si no se usa el lock, se inicializa varias veces y falla)
         with coordinator_lock:
             if not pose_coordinator.initialized:
                 logger.info("Inicializando coordinador de procesamiento de pose...")
@@ -598,11 +412,11 @@ def receive_chunk():
         
         # Procesar todos los chunks de todas las cámaras
         processing_results = None
-        logger.info(f" Procesando chunk {chunk_number} de cámara {camera_id}")
+        logger.info(f"Procesando chunk {chunk_number} de cámara {camera_id}")
         
         # Usar semáforo para permitir chunks procesándose simultáneamente según configuración (1 o 2 GPUs)
         with processing_semaphore:
-            logger.info(f" Iniciando procesamiento paralelo de chunk {chunk_number} cámara {camera_id} (máximo {gpu_config.max_concurrent_chunks} simultáneos)")
+            logger.info(f"Iniciando procesamiento paralelo de chunk {chunk_number} cámara {camera_id} (máximo {gpu_config.max_concurrent_chunks} simultáneos)")
             
             # Procesar este chunk con todos los detectores
             chunk_id = str(chunk_number)
@@ -615,15 +429,15 @@ def receive_chunk():
             )
             
             success_count = sum(processing_results.values())
-            logger.info(f" Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
-            logger.info(f" Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
+            logger.info(f"Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
+            logger.info(f"Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
             
-            # Registrar finalización del chunk en ensemble processor
+            # Registrar finalización del chunk en ensemble processor. Cuando se haya procesado el último chunk de todas las cámaras, se iniciará automáticamente el ensemble.
             chunk_completed = ensemble_processor.register_chunk_completion(
                 patient_id, session_id, f"camera{camera_id}", chunk_number
             )
             if chunk_completed:
-                logger.info(f" ¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
+                logger.info(f"¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
 
         response_data = {
             'status': 'chunk_received',
@@ -634,7 +448,7 @@ def receive_chunk():
             'message': 'Chunk saved successfully'
         }
         
-        # Agregar información de procesamiento
+        # Agregar información de procesamiento.
         response_data['processing_results'] = processing_results
         response_data['processed'] = True
         response_data['successful_detectors'] = sum(processing_results.values())
@@ -646,95 +460,29 @@ def receive_chunk():
         logger.error(f"Error recibiendo chunk: {str(e)}")
         return jsonify({'error': f'Failed to receive chunk: {str(e)}'}), 500
 
-'''
-@app.route('/api/cameras/recalibrate', methods=['POST'])
-def recalibrate_cameras():
+@app.route('/api/gpu/status', methods=['GET'])
+def get_gpu_status():
     """
-    Recalcular parámetros extrínsecos de las cámaras
-    Se ejecuta cuando se mueven las cámaras
+    Obtener estado actual de las GPUs
     """
     try:
-        if not current_session['is_active']:
-            return jsonify({'error': 'No active session'}), 400
-        
-        patient_id = current_session['patient_id']
-        session_id = current_session['session_id']
-        
-        logger.info(f"Iniciando recalibración de cámaras para sesión {patient_id}/{session_id}...")
-        
-        # Usar sistema de calibración para auto-calibrar usando keypoints de la sesión
-        calibration_result = calibration_system.auto_calibrate_extrinsics_from_session(
-            patient_id=patient_id,
-            session_id=session_id
-        )
-        
-        if 'error' in calibration_result:
-            logger.error(f"Error en auto-calibración: {calibration_result['error']}")
+        if not pose_coordinator.initialized:
             return jsonify({
-                'success': False,
-                'error': calibration_result['error']
-            }), 500
-        
-        if calibration_result.get('success', False):
-            logger.info(f"Recalibración exitosa: {calibration_result['calibrated_count']} cámaras calibradas")
-            
-            # Guardar calibración actualizada
-            try:
-                calibration_file = data_config.base_data_dir / f"patient{patient_id}" / f"session{session_id}" / "calibration.npz"
-                calibration_file.parent.mkdir(parents=True, exist_ok=True)
-                calibration_system.save_calibration(str(calibration_file))
-                logger.info(f"Calibración guardada en: {calibration_file}")
-            except Exception as save_error:
-                logger.warning(f"Error guardando calibración: {save_error}")
-            
-            return jsonify({
-                'success': True,
-                'status': 'recalibration_completed',
-                'message': 'Camera extrinsic parameters recalibrated successfully',
-                'calibration_result': calibration_result
+                'coordinator_initialized': False,
+                'message': 'Pose coordinator not initialized'
             })
-        else:
-            logger.warning("Recalibración falló")
-            return jsonify({
-                'success': False,
-                'status': 'recalibration_failed',
-                'message': 'Camera recalibration failed',
-                'calibration_result': calibration_result
-            }), 400
+        
+        gpu_status = pose_coordinator.get_gpu_status()
+        
+        return jsonify({
+            'coordinator_initialized': True,
+            'gpu_status': gpu_status,
+            'processing_mode': gpu_status.get('mode', 'unknown')
+        })
         
     except Exception as e:
-        logger.error(f"Error en recalibración: {str(e)}")
-        return jsonify({'error': f'Failed to recalibrate cameras: {str(e)}'}), 500
-
-
-@app.route('/api/pipeline/status', methods=['GET'])
-def get_pipeline_status():
-    """
-    Obtener estado completo del pipeline de procesamiento
-    """
-    try:
-        status = video_pipeline.get_processing_status()
-        return jsonify(status)
-    except Exception as e:
-        logger.error(f"Error obteniendo estado del pipeline: {str(e)}")
-        return jsonify({'error': f'Failed to get pipeline status: {str(e)}'}), 500
-
-@app.route('/api/session/<patient_id>/<session_id>/analysis', methods=['GET'])
-def get_session_analysis(patient_id: str, session_id: str):
-    """
-    Obtener análisis completo de una sesión procesada
-    
-    Args:
-        patient_id: ID del paciente
-        session_id: ID de la sesión
-    """
-    try:
-        analysis = video_pipeline.get_session_analysis(patient_id, session_id)
-        return jsonify(analysis)
-    except Exception as e:
-        logger.error(f"Error obteniendo análisis de sesión: {str(e)}")
-        return jsonify({'error': f'Failed to get session analysis: {str(e)}'}), 500
-'''
+        logger.error(f"Error obteniendo estado de GPU: {str(e)}")
+        return jsonify({'error': f'Failed to get GPU status: {str(e)}'}), 500
 
 @app.errorhandler(413)
 def too_large(e):
@@ -753,11 +501,11 @@ def internal_error(e):
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    logger.info(f"Iniciando servidor de análisis de gonartrosis...")
+    logger.info(f"Iniciando servidor...")
     logger.info(f"Puerto: {server_config.port}")
     logger.info(f"Directorio de datos: {data_config.base_data_dir}")
-    logger.info(f"🎮 GPUs configuradas: {gpu_config.available_gpus}")
-    logger.info(f"🔧 Máximo chunks concurrentes: {gpu_config.max_concurrent_chunks}")
+    logger.info(f"GPUs configuradas: {gpu_config.available_gpus}")
+    logger.info(f"Máximo chunks concurrentes: {gpu_config.max_concurrent_chunks}")
     
     app.run(
         host=server_config.host,

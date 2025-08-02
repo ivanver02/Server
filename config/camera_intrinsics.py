@@ -1,7 +1,3 @@
-"""
-Parámetros intrínsecos de las cámaras Orbbec Gemini 335L
-Calculados mediante calibración con tablero de ajedrez
-"""
 import numpy as np
 from typing import Dict, Tuple
 
@@ -103,7 +99,7 @@ def update_camera_intrinsics(camera_id: int, camera_matrix: np.ndarray,
         "serial_number": serial_number or f"UNKNOWN_{camera_id}"
     }
     
-    print(f"✅ Parámetros intrínsecos actualizados para cámara {camera_id}")
+    print(f"Parámetros intrínsecos actualizados para cámara {camera_id}")
 
 def get_all_camera_intrinsics() -> Dict[str, Dict[str, np.ndarray]]:
     """Obtener todos los parámetros intrínsecos"""

@@ -1,7 +1,3 @@
-"""
-Configuración general del sistema de procesamiento de video
-Sistema de análisis de marcha para detección de gonartrosis
-"""
 from dataclasses import dataclass, field
 from typing import Dict
 from pathlib import Path
@@ -129,10 +125,7 @@ class ProcessingConfig:
 
 @dataclass
 class EnsembleConfig:
-    """Configuración para procesamiento de ensemble"""
-    # Umbral mínimo de confianza para incluir un keypoint en el ensemble
-    confidence_threshold: float = 0.5
-    
+    """Configuración para procesamiento de ensemble"""    
     # Número mínimo de detectores requeridos para generar ensemble
     min_detectors_required: int = 1
 

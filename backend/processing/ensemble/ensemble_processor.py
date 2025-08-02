@@ -1,6 +1,3 @@
-"""
-Procesador de ensemble generalizable para combinar múltiples detectores de pose
-"""
 import numpy as np
 import threading
 from pathlib import Path
@@ -23,7 +20,7 @@ class EnsembleProcessor:
     """
     
     def __init__(self, base_data_dir: Path):
-        self.base_data_dir = Path(base_data_dir)
+        self.base_data_dir = Path(base_data_dir) # Directorio de la carpeta data/
         
         # Inicializar instancias de detectores para acceder a sus configuraciones
         self.detector_instances = {

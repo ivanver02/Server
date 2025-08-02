@@ -1,6 +1,3 @@
-"""
-Detector HRNet para análisis de pose
-"""
 from .base import BasePoseDetector
 
 

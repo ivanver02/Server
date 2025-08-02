@@ -1,6 +1,3 @@
-"""
-Detector CSP para análisis de pose
-"""
 from .base import BasePoseDetector
 
 

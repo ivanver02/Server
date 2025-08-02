@@ -1,12 +1,8 @@
-"""
-Clase base para detectores de pose
-"""
-import os
 import numpy as np
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from mmpose.apis import MMPoseInferencer
 from config import mmpose_config, data_config, processing_config
@@ -27,7 +23,7 @@ class BasePoseDetector(ABC):
             model_name: Nombre del modelo (usado para directorios)
             config_key: Clave en mmpose_config para obtener la configuración
         """
-        self.model_name = model_name.lower()  # Para directorios y logging
+        self.model_name = model_name.lower()
         self.config_key = config_key
         self.inferencer: Optional[MMPoseInferencer] = None
         self.config = getattr(mmpose_config, config_key)
@@ -37,7 +33,7 @@ class BasePoseDetector(ABC):
         
     def initialize(self) -> bool:
         """
-        Inicializar el detector con manejo mejorado de errores
+        Inicializar el detector con manejo de errores
         """
         try:
             # Construir rutas completas desde la configuración
@@ -48,6 +44,7 @@ class BasePoseDetector(ABC):
             if not pose2d_path.exists():
                 logger.error(f"Config file not found: {pose2d_path}")
                 
+                '''
                 # Intentar buscar configuraciones alternativas
                 alternatives = self._find_alternative_configs()
                 if alternatives:
@@ -64,6 +61,7 @@ class BasePoseDetector(ABC):
                 else:
                     logger.error(f"No alternatives available for {self.model_name}")
                     return False
+                '''
             
             # Verificar archivo de pesos
             if not pose2d_weights_path.exists():
@@ -85,31 +83,6 @@ class BasePoseDetector(ABC):
         except Exception as e:
             logger.error(f"Error initializing {self.model_name} detector: {e}")
             return False
-    
-    def _find_alternative_configs(self) -> list:
-        """
-        Buscar configuraciones alternativas para el detector
-        
-        Returns:
-            Lista de rutas de configuración alternativas
-        """
-        # Configuraciones alternativas basadas en archivos reales
-        alternatives = {
-            'vitpose': [
-                'configs/pose2d/td-hm_ViTPose-large_8xb64-210e_coco-256x192.py'
-            ],
-            'mspn': [
-                'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py'
-            ],
-            'hrnet': [
-                'configs/pose2d/td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py'
-            ],
-            'csp': [
-                'configs/pose2d/cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py'
-            ]
-        }
-        
-        return alternatives.get(self.model_name.lower(), [])
     
     def process_chunk(self, video_path: Path, patient_id: str, session_id: str, 
                      camera_id: int, chunk_id: str) -> bool:
@@ -135,8 +108,8 @@ class BasePoseDetector(ABC):
             keypoints_base_dir = self._create_keypoints_directories(
                 patient_id, session_id, camera_id
             )
-            
-            # Configurar argumentos para el inferenciador
+
+            # Configurar argumentos iniciales, sin guardar vídeo anotado, para el inferenciador
             inference_args = {
                 'return_vis': processing_config.save_annotated_videos,
                 'show': False
@@ -191,7 +164,6 @@ class BasePoseDetector(ABC):
     def _create_keypoints_directories(self, patient_id: str, session_id: str, 
                                     camera_id: int) -> Path:
         """Crear directorios para guardar keypoints"""
-        # Nueva estructura: keypoints2D/{model_name}/camera{id}/coordinates|confidence
         base_dir = (data_config.unprocessed_dir / f"patient{patient_id}" / 
                    f"session{session_id}" / "keypoints2D" / self.model_name / 
                    f"camera{camera_id}")
@@ -213,3 +185,31 @@ class BasePoseDetector(ABC):
         
         annotated_dir.mkdir(parents=True, exist_ok=True)
         return annotated_dir
+    
+
+    '''
+    def _find_alternative_configs(self) -> list:
+        """
+        Buscar configuraciones alternativas para el detector
+        
+        Returns:
+            Lista de rutas de configuración alternativas
+        """
+        # Configuraciones alternativas basadas en archivos reales
+        alternatives = {
+            'vitpose': [
+                'configs/pose2d/td-hm_ViTPose-large_8xb64-210e_coco-256x192.py'
+            ],
+            'mspn': [
+                'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py'
+            ],
+            'hrnet': [
+                'configs/pose2d/td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py'
+            ],
+            'csp': [
+                'configs/pose2d/cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py'
+            ]
+        }
+        
+        return alternatives.get(self.model_name.lower(), [])
+    '''

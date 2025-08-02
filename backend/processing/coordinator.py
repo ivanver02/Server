@@ -1,11 +1,8 @@
-"""
-Coordinador para el procesamiento de pose con múltiples detectores
-"""
 import logging
 import threading
 import os
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 from .detectors import VitPoseDetector, HRNetDetector, CSPDetector
 # from .detectors import MSPNDetector  # Comentado - no usar MSPN
@@ -34,8 +31,8 @@ class PoseProcessingCoordinator:
         self.gpu_usage = gpu_config.get_gpu_usage_dict()  # Usar GPUs configuradas
         self.available_gpus = gpu_config.available_gpus.copy()
         
-        logger.info(f"🎮 GPUs configuradas: {self.available_gpus}")
-        logger.info(f"🔧 Máximo chunks concurrentes: {gpu_config.max_concurrent_chunks}")
+        logger.info(f"GPUs configuradas: {self.available_gpus}")
+        logger.info(f"Máximo chunks concurrentes: {gpu_config.max_concurrent_chunks}")
     
     def initialize_all(self) -> bool:
         """
@@ -71,16 +68,16 @@ class PoseProcessingCoordinator:
         with self.gpu_lock:
             # Si no hay GPUs configuradas, retornar -1 (usar CPU)
             if not self.available_gpus:
-                logger.debug("💻 Configuración: Solo CPU (sin GPUs configuradas)")
+                logger.debug("Configuración: Solo CPU (sin GPUs configuradas)")
                 return -1
                 
             for gpu_id in self.available_gpus:
                 if gpu_id in self.gpu_usage and not self.gpu_usage[gpu_id]:
                     self.gpu_usage[gpu_id] = True
-                    logger.debug(f"🎮 GPU {gpu_id} ASIGNADA ✅")
+                    logger.debug(f"GPU {gpu_id} ASIGNADA")
                     return gpu_id
             
-            logger.warning(f"⚠️  Todas las GPUs están ocupadas {self.available_gpus} - esperando liberación")
+            logger.warning(f"Todas las GPUs están ocupadas {self.available_gpus} - esperando liberación")
             return -1  # No hay GPUs disponibles
     
     def _release_gpu(self, gpu_id: int):
@@ -93,7 +90,7 @@ class PoseProcessingCoordinator:
         with self.gpu_lock:
             if gpu_id in self.gpu_usage:
                 self.gpu_usage[gpu_id] = False
-                logger.debug(f"🎮 GPU {gpu_id} LIBERADA ✅")
+                logger.debug(f"GPU {gpu_id} LIBERADA ")
             
     def _set_gpu_for_processing(self, gpu_id: int):
         """
@@ -104,9 +101,9 @@ class PoseProcessingCoordinator:
         """
         if gpu_id >= 0:
             os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-            logger.debug(f"🎮 CUDA_VISIBLE_DEVICES configurado a GPU {gpu_id}")
+            logger.debug(f"CUDA_VISIBLE_DEVICES configurado a GPU {gpu_id}")
         else:
-            logger.warning("⚠️  No se pudo asignar GPU, usando CPU o GPU por defecto")
+            logger.warning(" No se pudo asignar GPU, usando CPU o GPU por defecto")
     
     def process_chunk(self, video_path: Path, patient_id: str, session_id: str, 
                      camera_id: int, chunk_id: str) -> Dict[str, bool]:
@@ -132,9 +129,9 @@ class PoseProcessingCoordinator:
         
         # Mensaje inicial claro sobre qué GPU se está usando
         if assigned_gpu >= 0:
-            logger.info(f"🎮 INICIANDO procesamiento de Cámara {camera_id} - Chunk {chunk_id} en GPU {assigned_gpu}")
+            logger.info(f"INICIANDO procesamiento de Cámara {camera_id} - Chunk {chunk_id} en GPU {assigned_gpu}")
         else:
-            logger.info(f"💻 INICIANDO procesamiento de Cámara {camera_id} - Chunk {chunk_id} en CPU (sin GPU disponible)")
+            logger.info(f"INICIANDO procesamiento de Cámara {camera_id} - Chunk {chunk_id} en CPU (sin GPU disponible)")
         
         try:
             # Configurar GPU para el procesamiento
@@ -147,7 +144,7 @@ class PoseProcessingCoordinator:
                     try:
                         # Mensaje específico por detector indicando GPU
                         gpu_info = f"GPU {assigned_gpu}" if assigned_gpu >= 0 else "CPU"
-                        logger.info(f"🔍 Procesando con {detector.model_name} en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}")
+                        logger.info(f"Procesando con {detector.model_name} en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}")
                         
                         success = detector.process_chunk(
                             video_path=video_path,
@@ -159,21 +156,21 @@ class PoseProcessingCoordinator:
                         results[detector.model_name] = success
                         
                         if success:
-                            logger.info(f"✅ {detector.model_name} completado en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}")
+                            logger.info(f"{detector.model_name} completado en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}")
                         else:
-                            logger.warning(f"❌ {detector.model_name} falló en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}")
+                            logger.warning(f"{detector.model_name} falló en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}")
                             
                     except Exception as e:
                         gpu_info = f"GPU {assigned_gpu}" if assigned_gpu >= 0 else "CPU"
-                        logger.error(f"💥 Error en {detector.model_name} en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}: {e}")
+                        logger.error(f"Error en {detector.model_name} en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}: {e}")
                         results[detector.model_name] = False
                 else:
-                    logger.debug(f"⏭️  Saltando {detector.model_name} - no inicializado")
+                    logger.debug(f"Saltando {detector.model_name} - no inicializado")
                     results[detector.model_name] = False
 
             success_count = sum(results.values())
             gpu_info = f"GPU {assigned_gpu}" if assigned_gpu >= 0 else "CPU"
-            logger.info(f"🎬 COMPLETADO procesamiento en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}: {success_count}/{len(results)} detectores exitosos")
+            logger.info(f"COMPLETADO procesamiento en {gpu_info} | Cámara {camera_id} - Chunk {chunk_id}: {success_count}/{len(results)} detectores exitosos")
             
             return results
             
@@ -182,6 +179,7 @@ class PoseProcessingCoordinator:
             if assigned_gpu >= 0:
                 self._release_gpu(assigned_gpu)
     
+    # Se usa en el endpoint /api/gpu/status
     def get_gpu_status(self) -> Dict[str, Any]:
         """
         Obtener el estado actual de las GPUs basado en configuración
