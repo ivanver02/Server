@@ -33,6 +33,7 @@ class BasePoseDetector(ABC):
         self.config = getattr(mmpose_config, config_key)
         self.is_initialized = False
         self.keypoints_names = None  # Será asignado por cada detector específico
+        self.final_keypoints_idx = None  # Correspondencia entre los índices de los keypoints en el orden que se van a guardar finalmente (almacenado en EnsembleProcessor) con respecto a los de este detector, con la estructura {posicion_final_keypoint_name:posicion_keypoint_detector}
         
     def initialize(self) -> bool:
         """

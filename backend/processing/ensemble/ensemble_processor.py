@@ -45,31 +45,40 @@ class EnsembleProcessor:
     def _generate_final_keypoint_names(self) -> List[str]:
         """
         Generar lista de nombres de keypoints finales basada en ponderaciones no nulas
+        IMPORTANTE (Ahora mismo se cumple, pero cuidado): en todos los modelos que usemos, los nombres asociados al mismo keypoint deben ser los mismos, y deben de venir en el mismo orden. Ejemplo: 'nose' debe ser 'nose' en todos los detectores.
+        No debería de suponer mucho problema porque los modelos COCO devuelven los mismos puntos en el mismo orden, igual con los wholebody.
         """
         final_names = []
-        
+
+        final_idx = 0
+
         # Obtener el número máximo de keypoints entre todos los detectores
         max_keypoints = max(
-            len(detector.ensemble_confidence_weights) 
+            len(detector.ensemble_confidence_weights)
             for detector in self.detector_instances.values()
         )
-        
+
+        # Inicializar el diccionario de correspondencia en cada detector
+        for detector in self.detector_instances.values():
+            detector.final_keypoints_idx = {}
+
         for kp_idx in range(max_keypoints):
-            # Verificar si algún detector tiene ponderación no nula para este keypoint
             has_weight = False
             keypoint_name = None
-            
-            for detector_name, detector in self.detector_instances.items():
+
+            for detector in self.detector_instances.values():
                 if (kp_idx < len(detector.ensemble_confidence_weights) and 
                     detector.ensemble_confidence_weights[kp_idx] > 0):
                     has_weight = True
                     if kp_idx < len(detector.keypoints_names):
                         keypoint_name = detector.keypoints_names[kp_idx]
+                        detector.final_keypoints_idx[final_idx] = kp_idx
                     break
-            
+
             if has_weight and keypoint_name:
                 final_names.append(keypoint_name)
-        
+                final_idx += 1
+
         return final_names
     
     def register_session_start(self, patient_id: str, session_id: str, cameras_count: int):
@@ -196,7 +205,7 @@ class EnsembleProcessor:
         """Procesar ensemble para un chunk específico de una cámara"""
         try:
             # Obtener todos los archivos frame_chunk.npy de todos los detectores para este chunk
-            # Estructura: {frame_number: {detector_name: keypoints}}
+            # Estructura: {frame_number: {detector_name: {coordinates:coordinate_array, confidence:confidence_array}}}
             all_frame_files = self._get_all_frame_files(patient_id, session_id, camera_id, chunk_number)
             
             if not all_frame_files:
@@ -210,7 +219,7 @@ class EnsembleProcessor:
             
             # Procesar cada frame para los distintos detectores
             for frame_number in sorted(all_frame_files.keys()):
-                # Estructura de frame_data: {detector_name: keypoints}
+                # Estructura de frame_data: {detector_name: {coordinates:coordinate_array, confidence:confidence_array}}
                 frame_data = all_frame_files[frame_number]
                 
                 logger.debug(f" Frame {frame_number}: disponible en {len(frame_data)} detectores: {list(frame_data.keys())}")
@@ -223,6 +232,7 @@ class EnsembleProcessor:
                 
                 # Combinar keypoints de todos los detectores para este frame específico
                 ensemble_result = self._combine_keypoints(frame_data)
+                # Estructura de ensemble_result: {coordinates: array(N,2), confidence: array(N)}
                 if ensemble_result is not None:
                     # Guardar resultado individual frame_chunk.npy
                     self._save_single_frame_result(ensemble_result, patient_id, session_id, camera_id, frame_number, chunk_number)
@@ -242,142 +252,119 @@ class EnsembleProcessor:
     def _get_all_frame_files(self, patient_id: str, session_id: str, camera_id: int, chunk_number: int) -> Dict:
         """
         Obtener todos los archivos frame_chunk.npy organizados por frame number
-        Devuelve un diccionario {frame_number: {detector_name: keypoints}}
+        Devuelve un diccionario {frame_number: {detector_name: {coordinates:coordinate_array, confidence:confidence_array}}}
         """
 
         frame_files = {}
-        
         keypoints_base = self.base_data_dir / "unprocessed" / f"patient{patient_id}" / f"session{session_id}" / "keypoints2D"
         logger.debug(f"Buscando keypoints en: {keypoints_base}")
-        
+
         for detector_name in self.detector_instances.keys():
-            detector_dir = keypoints_base / detector_name / f"camera{camera_id}" / "coordinates"
-            
-            if not detector_dir.exists():
-                logger.debug(f"No existe directorio para detector {detector_name}: {detector_dir}")
+            coordinates_dir = keypoints_base / detector_name / f"camera{camera_id}" / "coordinates"
+            confidence_dir = keypoints_base / detector_name / f"camera{camera_id}" / "confidence"
+
+            if not coordinates_dir.exists():
+                logger.debug(f"No existe directorio de coordenadas para detector {detector_name}: {coordinates_dir}")
                 continue
-                
-            # Buscar todos los archivos de este chunk
-            chunk_files = list(detector_dir.glob(f"*_{chunk_number}.npy"))
-            logger.debug(f"Detector {detector_name}, chunk {chunk_number}: encontrados {len(chunk_files)} archivos")
-            
+            if not confidence_dir.exists():
+                logger.debug(f"No existe directorio de confianza para detector {detector_name}: {confidence_dir}")
+                continue
+
+            # Buscar todos los archivos de este chunk en coordinates
+            chunk_files = list(coordinates_dir.glob(f"*_{chunk_number}.npy"))
+            logger.debug(f"Detector {detector_name}, chunk {chunk_number}: encontrados {len(chunk_files)} archivos de coordenadas")
+
             for chunk_file in chunk_files:
                 try:
-                    # El nombre del archivo es frame_chunk.npy, extraer el frame
                     frame_number = int(chunk_file.stem.split('_')[0])
-                    keypoints = np.load(chunk_file)
-                    
-                    # Organizar por frame number
+                    coordinates_array = np.load(chunk_file)
+                    confidence_file = confidence_dir / chunk_file.name
+                    if not confidence_file.exists():
+                        logger.debug(f"No existe archivo de confianza para frame {frame_number} en {confidence_file}")
+                        continue
+                    confidence_array = np.load(confidence_file)
+
                     if frame_number not in frame_files:
                         frame_files[frame_number] = {}
-                    
-                    frame_files[frame_number][detector_name] = keypoints
-                    logger.debug(f"Cargado frame {frame_number} de {detector_name}: shape {keypoints.shape}")
-                    
+                    frame_files[frame_number][detector_name] = {
+                        'coordinates': coordinates_array,
+                        'confidence': confidence_array
+                    }
+                    logger.debug(f"Cargado frame {frame_number} de {detector_name}: coords shape {coordinates_array.shape}, conf shape {confidence_array.shape}")
                 except (ValueError, IndexError) as e:
                     logger.debug(f"Error procesando archivo {chunk_file}: {e}")
                     continue
-        
+
         logger.info(f"Chunk {chunk_number}, cámara {camera_id}: encontrados {len(frame_files)} frames únicos")
         if len(frame_files) > 0:
             logger.debug(f"Frames encontrados: {sorted(frame_files.keys())}")
         return frame_files
 
-    def _save_single_frame_result(self, keypoints: np.ndarray, patient_id: str, session_id: str, 
+    def _save_single_frame_result(self, ensemble_result: Dict[str, np.ndarray], patient_id: str, session_id: str, 
                                 camera_id: int, frame_number: int, chunk_number: int):
-        """Guardar resultado de un frame individual como frame_chunk.npy"""
+        """Guardar resultado de un frame individual en carpetas coordinates y confidence"""
         try:
-            # Guardar en el directorio de los keypoints 2D procesados
-            output_dir = (self.base_data_dir / "processed" / "2D_keypoints" / 
+            output_dir = (self.base_data_dir / "processed" / "2D_keypoints" /
                          f"patient{patient_id}" / f"session{session_id}" / f"camera{camera_id}")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            output_file = output_dir / f"{frame_number}_{chunk_number}.npy"
-            np.save(output_file, keypoints)
-            
-            logger.debug(f"Frame guardado: {output_file}")
-                
+            coordinates_dir = output_dir / "coordinates"
+            confidence_dir = output_dir / "confidence"
+            coordinates_dir.mkdir(parents=True, exist_ok=True)
+            confidence_dir.mkdir(parents=True, exist_ok=True)
+
+            coordinates_file = coordinates_dir / f"{frame_number}_{chunk_number}.npy"
+            confidence_file = confidence_dir / f"{frame_number}_{chunk_number}.npy"
+
+            np.save(coordinates_file, ensemble_result['coordinates'])
+            np.save(confidence_file, ensemble_result['confidence'])
+
+            logger.debug(f"Frame guardado: {coordinates_file}, {confidence_file}")
         except Exception as e:
             logger.error(f"Error guardando frame {frame_number}_{chunk_number}: {e}")
     
-    def _combine_keypoints(self, frame_keypoints: Dict[str, np.ndarray]) -> Optional[np.ndarray]:
+def _combine_keypoints(self, frame_keypoints: Dict[str, dict]) -> Optional[Dict[str, np.ndarray]]:
         """
-        Combinar keypoints usando las ponderaciones de confianza especificadas
-        Solo incluye keypoints con confianza mayor al umbral configurado
-        Estructura de frame_keypoints: { detector_name: keypoints_array }
-        Resultado: array de forma (len(final_keypoint_names), 2)
+        Combina keypoints de todos los detectores usando combinación lineal ponderada por la confianza real y la ponderación de cada detector.
+        Devuelve un diccionario: {coordinates: array(N,2), confidence: array(N)}
         """
         try:
-            # Array final basado en el número de keypoints finales
             num_final_keypoints = len(self.final_keypoint_names)
-            final_keypoints = np.zeros((num_final_keypoints, 2))
-            
-            # Para cada keypoint final
+            coordinates_array = np.zeros((num_final_keypoints, 2))
+            confidence_array = np.zeros(num_final_keypoints)
+
             for final_kp_idx in range(num_final_keypoints):
                 weighted_coords = np.zeros(2)
+                weighted_conf = 0.0
                 total_weight = 0.0
-                
-                # Buscar este keypoint en todos los detectores
-                for detector_name, keypoints in frame_keypoints.items():
+
+                for detector_name, detector_data in frame_keypoints.items():
                     if detector_name not in self.detector_instances:
                         continue
-                    
                     detector_instance = self.detector_instances[detector_name]
                     confidence_weights = detector_instance.ensemble_confidence_weights
-                    
-                    # Encontrar el índice en este detector que corresponde al keypoint final actual
-                    detector_kp_idx = self._find_detector_keypoint_index(final_kp_idx, detector_name)
-                    
-                    if (detector_kp_idx is not None and 
+                    detector_kp_idx = detector_instance.final_keypoints_idx.get(final_kp_idx, None)
+                    if (
+                        detector_kp_idx is not None and
                         detector_kp_idx < len(confidence_weights) and
-                        detector_kp_idx < len(keypoints) and
-                        confidence_weights[detector_kp_idx] > 0):
-                        
-                        # Verificar que el keypoint tenga suficiente confianza real del modelo
-                        # keypoints shape: (N, 3) donde [:, 2] es la confianza
-                        if keypoints.shape[1] >= 3:
-                            model_confidence = keypoints[detector_kp_idx, 2]  # Confianza real del modelo
-                            
-                            # Solo usar keypoints con confianza mayor al umbral
-                            if model_confidence >= ensemble_config.confidence_threshold:
-                                ensemble_weight = confidence_weights[detector_kp_idx]
-                                coord = keypoints[detector_kp_idx, :2]  # Solo x, y
-                                
-                                weighted_coords += ensemble_weight * coord
-                                total_weight += ensemble_weight
-                        else:
-                            # Si no hay confianza almacenada, usar el keypoint sin filtro
-                            ensemble_weight = confidence_weights[detector_kp_idx]
-                            coord = keypoints[detector_kp_idx, :2]  # Solo x, y
-                            
-                            weighted_coords += ensemble_weight * coord
+                        detector_kp_idx < detector_data['coordinates'].shape[0] and
+                        detector_kp_idx < detector_data['confidence'].shape[0]
+                    ):
+                        model_confidence = detector_data['confidence'][detector_kp_idx]
+                        ensemble_weight = confidence_weights[detector_kp_idx]
+                        if ensemble_weight > 0 and model_confidence > 0:
+                            coord = detector_data['coordinates'][detector_kp_idx, :2]
+                            weighted_coords += ensemble_weight * model_confidence * coord
+                            weighted_conf += ensemble_weight * model_confidence
                             total_weight += ensemble_weight
-                
-                # Normalizar por peso total
+
                 if total_weight > 0:
-                    final_keypoints[final_kp_idx] = weighted_coords / total_weight
-                # Si no hay detectores válidos, queda en (0, 0)
-            
-            return final_keypoints
-            
+                    coordinates_array[final_kp_idx] = weighted_coords / weighted_conf if weighted_conf > 0 else np.zeros(2)
+                    confidence_array[final_kp_idx] = weighted_conf / total_weight
+                else:
+                    coordinates_array[final_kp_idx] = np.zeros(2)
+                    confidence_array[final_kp_idx] = 0.0
+
+            return {'coordinates': coordinates_array, 'confidence': confidence_array}
+
         except Exception as e:
             logger.error(f"Error combinando keypoints: {e}")
-            return None
-    
-    def _find_detector_keypoint_index(self, final_kp_idx: int, detector_name: str) -> Optional[int]:
-        """
-        Encontrar el índice en un detector específico que corresponde al keypoint final
-        """
-        try:
-            final_keypoint_name = self.final_keypoint_names[final_kp_idx]
-            detector_instance = self.detector_instances[detector_name]
-            
-            # Buscar el nombre en la lista de keypoints del detector
-            if final_keypoint_name in detector_instance.keypoints_names:
-                return detector_instance.keypoints_names.index(final_keypoint_name)
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error buscando índice de keypoint: {e}")
             return None
