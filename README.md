@@ -21,6 +21,9 @@ El sistema utiliza los siguientes modelos de MMPose:
 
 Cada modelo se integra como un detector independiente, con sus propias ponderaciones y lista de keypoints. Es posible añadir nuevos modelos de MMPose creando una clase que herede de `BasePoseDetector`, o integrar modelos externos sobreescribiendo los métodos necesarios.
 
+<div style="background-color:#e3f2fd; border-left:6px solid #1976d2; padding:10px; margin-bottom:10px;">
+Los archivos de <strong>checkpoint</strong> necesarios para los modelos se encuentran en una <strong>release</strong> del proyecto. Deben guardarse en la ruta exacta <code>Server/mmpose_models/checkpoints/</code>.
+</div>
 
 ---
 ## Estructura de archivos del proyecto
