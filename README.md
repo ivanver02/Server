@@ -19,6 +19,8 @@ El sistema utiliza los siguientes modelos de MMPose:
  - HRNet (WholeBody, 133 keypoints: cuerpo, pies, manos, cara)
  - CSP (WholeBody, 133 keypoints: cuerpo, pies, manos, cara)
 
+Para una descripción detallada de las clases y métodos principales del backend, consulta el archivo [`docs/main_classes.md`](docs/main_classes.md).
+
 Cada modelo se integra como un detector independiente, con sus propias ponderaciones y lista de keypoints. Es posible añadir nuevos modelos de MMPose creando una clase que herede de `BasePoseDetector`, o integrar modelos externos sobreescribiendo los métodos necesarios.
 
 <div style="background-color:#e3f2fd; border-left:6px solid #1976d2; padding:10px; margin-bottom:10px;">
