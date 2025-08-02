@@ -19,7 +19,6 @@ Clase base para todos los detectores de pose 2D. Proporciona la estructura comú
 - `initialize()`: Carga el modelo y sus parámetros.
 - `process_chunk(chunk_path)`: Procesa un chunk de vídeo y extrae los keypoints.
 - `save_annotated_video()`: Guarda el vídeo con anotaciones de keypoints.
-- `get_keypoints()`: Devuelve los keypoints detectados en el chunk.
 
 ---
 
@@ -72,7 +71,6 @@ Ejemplo de detector concreto basado en el modelo VitPose. Hereda de `BasePoseDet
 - `__init__()`: Inicializa el detector con los parámetros de VitPose.
 - `initialize()`: Carga el modelo VitPose y sus configuraciones.
 - `process_chunk(chunk_path)`: Procesa el chunk y extrae los keypoints usando VitPose.
-- `get_keypoints()`: Devuelve los keypoints detectados por VitPose.
 
 ---
 
