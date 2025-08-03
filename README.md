@@ -2,7 +2,7 @@
 
 Este proyecto es el backend para el procesamiento de video y reconstrucción 3D de keypoints, desarrollado por la Universidad de Málaga y el Hospital Costa del Sol. El sistema está diseñado para analizar la marcha humana y detectar patrones relacionados con la gonartrosis, empleando procesamiento multi-cámara, modelos de pose 2D y triangulación 3D.
 
-Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio [Code](../Code/README.md), que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
+Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio Code, que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
 
 ---
 ## Descripción del proyecto
@@ -31,24 +31,24 @@ Los archivos de <strong>checkpoint</strong> necesarios para los modelos se encue
 
 ```
 Server/
-├── [app.py](app.py)
-├── [main.py](main.py)
+├── app.py
+├── main.py
 ├── config/
-│   ├── [settings.py](config/settings.py)
-│   ├── [__init__.py](config/__init__.py)
-│   └── [camera_intrinsics.py](config/camera_intrinsics.py)
+│   ├── settings.py
+│   ├── __init__.py
+│   └── camera_intrinsics.py
 ├── backend/
 │   ├── processing/
 │   │   ├── ensemble/
-│   │   │   └── [ensemble_processor.py](backend/processing/ensemble/ensemble_processor.py)
+│   │   │   └── ensemble_processor.py
 │   │   ├── detectors/
-│   │   │   ├── [base.py](backend/processing/detectors/base.py)
-│   │   │   ├── [vitpose.py](backend/processing/detectors/vitpose.py)
-│   │   │   ├── [mspn.py](backend/processing/detectors/mspn.py)
-│   │   │   ├── [hrnet.py](backend/processing/detectors/hrnet.py)
-│   │   │   ├── [csp.py](backend/processing/detectors/csp.py)
+│   │   │   ├── base.py
+│   │   │   ├── vitpose.py
+│   │   │   ├── mspn.py
+│   │   │   ├── hrnet.py
+│   │   │   ├── csp.py
 │   │   │   └── ...
-│   │   ├── [coordinator.py](backend/processing/coordinator.py)
+│   │   ├── coordinator.py
 │   │   └── ...
 │   └── ...
 ├── mmpose_models/
@@ -77,8 +77,8 @@ Server/
 │   │   └── photos_from_video/
 │   │       └── <paciente>/<sesion>/<camara>/frames/
 │   └── ...
-├── [LICENSE.md](LICENSE.md)
-└── [README.md](README.md)
+├── LICENSE.md
+└── README.md
 ```
 
 
