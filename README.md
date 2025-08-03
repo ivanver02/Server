@@ -1,8 +1,8 @@
-
 # Sistema de Análisis de Marcha para Detección de Gonartrosis
 
 Este proyecto es el backend para el procesamiento de video y reconstrucción 3D de keypoints, desarrollado por la Universidad de Málaga y el Hospital Costa del Sol. El sistema está diseñado para analizar la marcha humana y detectar patrones relacionados con la gonartrosis, empleando procesamiento multi-cámara, modelos de pose 2D y triangulación 3D.
 
+Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio Code, que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
 
 ---
 ## Descripción del proyecto
@@ -201,6 +201,4 @@ Este proyecto está licenciado bajo Apache License 2.0. Los modelos y configurac
 
 
 ---
-## Créditos
-
 Desarrollado por la Universidad de Málaga y el Hospital Costa del Sol.
