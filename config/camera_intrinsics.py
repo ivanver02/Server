@@ -66,7 +66,7 @@ def get_camera_intrinsics(camera_id: int) -> Tuple[np.ndarray, np.ndarray]:
 def get_default_intrinsics() -> Tuple[np.ndarray, np.ndarray]:
     """
     Obtener parámetros intrínsecos por defecto
-    Basados en especificaciones típicas de Orbbec Gemini 335L
+    Basados en especificaciones típicas de Orbbec Gemini 335Le
     """
     # Matriz de cámara por defecto (estimación inicial)
     camera_matrix = np.array([
