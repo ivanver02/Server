@@ -2,13 +2,12 @@
 
 Este proyecto es el backend para el procesamiento de video y reconstrucción 3D de keypoints, desarrollado por la Universidad de Málaga y el Hospital Costa del Sol. El sistema está diseñado para analizar la marcha humana y detectar patrones relacionados con la gonartrosis, empleando procesamiento multi-cámara, modelos de pose 2D y triangulación 3D.
 
-Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio Code, que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
+Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio [Code](../Code/README.md), que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
 
 ---
 ## Descripción del proyecto
 
 El servidor recibe chunks de video desde varias cámaras, extrae los frames, detecta keypoints 2D usando varios modelos de MMPose, realiza un ensemble ponderado de los resultados y reconstruye los keypoints en 3D. El sistema está pensado para funcionar en entornos clínicos y de investigación, permitiendo la evaluación triplanar de la rodilla y la obtención de métricas precisas para el diagnóstico.
-
 
 ---
 ## Modelos empleados
@@ -21,10 +20,10 @@ El sistema utiliza los siguientes modelos de MMPose:
 
 Para una descripción detallada de las clases y métodos principales del backend, consulta el archivo [`docs/main_classes.md`](docs/main_classes.md).
 
-Cada modelo se integra como un detector independiente, con sus propias ponderaciones y lista de keypoints. Es posible añadir nuevos modelos de MMPose creando una clase que herede de `BasePoseDetector`, o integrar modelos externos sobreescribiendo los métodos necesarios.
+Cada modelo se integra como un detector independiente, con sus propias ponderaciones y lista de keypoints. Es posible añadir nuevos modelos de MMPose creando una clase que herede de [`backend/processing/detectors/base.py`](backend/processing/detectors/base.py), o integrar modelos externos sobreescribiendo los métodos necesarios.
 
 <div style="background-color:#e3f2fd; border-left:6px solid #1976d2; padding:10px; margin-bottom:10px;">
-Los archivos de <strong>checkpoint</strong> necesarios para los modelos se encuentran en una <strong>release</strong> del proyecto. Deben guardarse en la ruta exacta <code>Server/mmpose_models/checkpoints/</code>.
+Los archivos de <strong>checkpoint</strong> necesarios para los modelos se encuentran en una <strong>release</strong> del proyecto. Deben guardarse en la ruta exacta [`Server/mmpose_models/checkpoints/`](mmpose_models/checkpoints/).
 </div>
 
 ---
@@ -32,24 +31,24 @@ Los archivos de <strong>checkpoint</strong> necesarios para los modelos se encue
 
 ```
 Server/
-├── app.py
-├── main.py
+├── [app.py](app.py)
+├── [main.py](main.py)
 ├── config/
-│   ├── settings.py
-│   ├── __init__.py
-│   └── camera_intrinsics.py
+│   ├── [settings.py](config/settings.py)
+│   ├── [__init__.py](config/__init__.py)
+│   └── [camera_intrinsics.py](config/camera_intrinsics.py)
 ├── backend/
 │   ├── processing/
 │   │   ├── ensemble/
-│   │   │   └── ensemble_processor.py
+│   │   │   └── [ensemble_processor.py](backend/processing/ensemble/ensemble_processor.py)
 │   │   ├── detectors/
-│   │   │   ├── base.py
-│   │   │   ├── vitpose.py
-│   │   │   ├── mspn.py
-│   │   │   ├── hrnet.py
-│   │   │   ├── csp.py
+│   │   │   ├── [base.py](backend/processing/detectors/base.py)
+│   │   │   ├── [vitpose.py](backend/processing/detectors/vitpose.py)
+│   │   │   ├── [mspn.py](backend/processing/detectors/mspn.py)
+│   │   │   ├── [hrnet.py](backend/processing/detectors/hrnet.py)
+│   │   │   ├── [csp.py](backend/processing/detectors/csp.py)
 │   │   │   └── ...
-│   │   ├── coordinator.py
+│   │   ├── [coordinator.py](backend/processing/coordinator.py)
 │   │   └── ...
 │   └── ...
 ├── mmpose_models/
@@ -78,8 +77,8 @@ Server/
 │   │   └── photos_from_video/
 │   │       └── <paciente>/<sesion>/<camara>/frames/
 │   └── ...
-├── LICENSE.md
-└── README.md
+├── [LICENSE.md](LICENSE.md)
+└── [README.md](README.md)
 ```
 
 
@@ -95,7 +94,7 @@ Instala las dependencias antes de ejecutar el servidor.
 ```bash
 pip install -r requirements.txt
 ```
-2. Configura los parámetros en `config/settings.py` según tu entorno (puerto, GPUs, rutas de modelos, etc.).
+2. Configura los parámetros en [`config/settings.py`](config/settings.py) según tu entorno (puerto, GPUs, rutas de modelos, etc.).
 3. Ejecuta el servidor:
 ```bash
 python main.py
@@ -121,7 +120,7 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 ---
 ## Consideraciones importantes
 
-- Se pueden generar demos visuales en <code>Server/data/processed/annotated_videos</code> para ver la reconstrucción de keypoints 2D por modelo y cámara. Para ello, activa <code>save_annotated_videos = True</code> en <code>settings.py</code> y limita <code>available_gpus</code> a una sola GPU.
+- Se pueden generar demos visuales en [`data/processed/annotated_videos`](data/processed/annotated_videos) para ver la reconstrucción de keypoints 2D por modelo y cámara. Para ello, activa `save_annotated_videos = True` en [`config/settings.py`](config/settings.py) y limita `available_gpus` a una sola GPU.
 
 - Solo puede haber una sesión de grabación activa, pero pueden procesarse varias sesiones simultáneamente.
 
@@ -143,7 +142,7 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 ---
 ## Detectors
 
-- Todos los detectores heredan de `base.py`, donde se define la inicialización, manejo de GPU, guardado de vídeos anotados y procesamiento de chunks comunes.
+- Todos los detectores heredan de [`backend/processing/detectors/base.py`](backend/processing/detectors/base.py), donde se define la inicialización, manejo de GPU, guardado de vídeos anotados y procesamiento de chunks comunes.
 - Las características específicas de cada detector (ponderaciones, keypoints, etc.) se definen en cada clase concreta.
 - Para añadir un detector de MMPose, basta con crear una clase que herede de `BasePoseDetector`.
 - Para integrar otros detectores, se pueden sobreescribir los métodos `initialize` y `process_chunk`, o crear una clase con los métodos necesarios adaptados al nuevo modelo.
@@ -180,24 +179,24 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 ---
 ## Configuraciones
 
-- Toda la configuración está centralizada en la carpeta `config/`.
-- El archivo principal es `settings.py`, donde se definen rutas, GPUs, parámetros de procesamiento, etc.
+- Toda la configuración está centralizada en la carpeta [`config/`](config/).
+- El archivo principal es [`config/settings.py`](config/settings.py), donde se definen rutas, GPUs, parámetros de procesamiento, etc.
 
 
 ---
 ## Testing
 
 <div style="background-color:#fffde7; border-left:6px solid #fbc02d; padding:10px; margin-bottom:10px;">
-<strong>Consejo:</strong> Utiliza la carpeta <code>testing</code> para prototipos y pruebas manuales antes de integrar cambios en el sistema principal.
+<strong>Consejo:</strong> Utiliza la carpeta [`testing`](testing) para prototipos y pruebas manuales antes de integrar cambios en el sistema principal.
 </div>
 
-La carpeta `testing` no está pensada para pruebas automáticas, sino como espacio para desarrollar código aislado que posteriormente se integra en el proyecto principal.
+La carpeta [`testing`](testing) no está pensada para pruebas automáticas, sino como espacio para desarrollar código aislado que posteriormente se integra en el proyecto principal.
 
 
 ---
 ## Licencia
 
-Este proyecto está licenciado bajo Apache License 2.0. Los modelos y configuraciones de MMPose también están bajo Apache 2.0. Consulta el archivo `LICENSE.md` para más detalles, incluyendo la cita académica recomendada para MMPose.
+Este proyecto está licenciado bajo Apache License 2.0. Los modelos y configuraciones de MMPose también están bajo Apache 2.0. Consulta el archivo [`LICENSE.md`](LICENSE.md) para más detalles, incluyendo la cita académica recomendada para MMPose.
 
 
 ---
