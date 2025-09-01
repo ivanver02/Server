@@ -186,9 +186,9 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
 def main():
     """Función principal"""
     # Configuración - ajustar según tu estructura
-    base_data_dir = Path(r"C:\Users\Juan Cantizani\Server\data")  # Ajustar ruta según tu configuración
+    base_data_dir = Path(r"/home/work/Server/data")  # Ajustar ruta según tu configuración
     patient_id = "1"
-    session_id = "6"
+    session_id = "8"
     camera_id = 0
     chunk_number = 0
     
