@@ -178,6 +178,7 @@ class EnsembleProcessor:
                 return
             
             # Procesar ensemble para cada chunk y cada cámara
+            total_processed = 0 
             for chunk_num in range(max_chunk + 1):
                 logger.info(f" Procesando chunk {chunk_num}/{max_chunk}")
                 chunk_processed_count = 0
