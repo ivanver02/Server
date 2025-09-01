@@ -9,6 +9,7 @@ import logging
 
 from .camera import CameraSystem
 from .calculate_intrinsics import CameraCalibrator, calibrate_from_images
+from .calculate_extrinsics import calibrate_extrinsics_from_keypoints
 from .triangulation_svd import triangulate_with_svd
 from .bundle_adjustment import optimize_with_bundle_adjustment
 from .reprojection import validate_reconstruction
@@ -56,7 +57,7 @@ class ReconstructionCoordinator:
             
             # Usar configuración por defecto
             calibrator = CameraCalibrator(self.base_data_dir)
-            calibrator.initialize_cameras_from_config(camera_ids)
+            calibrator.initialize_cameras_from_config(camera_ids, reference_id=camera_ids[0])
             self.camera_system = calibrator.get_camera_system()
             
             logger.info(f"Sistema de cámaras inicializado con configuración por defecto para {camera_ids}")
@@ -305,7 +306,53 @@ class ReconstructionCoordinator:
                             sessions.append((patient_id, session_id))
         
         return sessions
-
+    
+    def calibrate_extrinsics_from_keypoints(self, patient_id: str, session_id: str,
+                                           method: str = "pnp", 
+                                           min_confidence: float = 0.3) -> bool:
+        """
+        Calibrar extrínsecos usando keypoints 2D de una sesión específica
+        
+        Args:
+            patient_id: ID del paciente
+            session_id: ID de la sesión  
+            method: Método de cálculo ("pnp" o "optimization")
+            min_confidence: Confianza mínima para keypoints válidos
+        """
+        if self.camera_system is None:
+            logger.error("Sistema de cámaras no inicializado")
+            return False
+            
+        # Cargar datos de keypoints 2D
+        keypoints_2d, confidences_2d = self.load_keypoints_data(patient_id, session_id)
+        
+        if not keypoints_2d:
+            logger.error("No se pudieron cargar keypoints 2D para calibración")
+            return False
+        
+        logger.info(f"Calibrando extrínsecos usando datos de patient{patient_id}/session{session_id}")
+        
+        # Calibrar extrínsecos
+        success = calibrate_extrinsics_from_keypoints(
+            self.camera_system,
+            keypoints_2d, 
+            confidences_2d,
+            method=method,
+            min_confidence=min_confidence
+        )
+        
+        if success:
+            logger.info("Extrínsecos calibrados exitosamente desde keypoints 2D")
+            
+            # Guardar calibración actualizada
+            calibration_dir = self.base_data_dir / "calibration"
+            self.camera_system.save_system(calibration_dir)
+            logger.info(f"Calibración guardada en {calibration_dir}")
+            
+            return True
+        else:
+            logger.error("Falló la calibración de extrínsecos")
+            return False
 
 def reconstruct_patient_session(base_data_dir: Path, patient_id: str, session_id: str,
                                camera_ids: List[int], method: str = "svd",

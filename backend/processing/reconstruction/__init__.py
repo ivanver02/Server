@@ -2,6 +2,7 @@
 from .coordinator import ReconstructionCoordinator, reconstruct_patient_session
 from .camera import Camera, CameraSystem
 from .calculate_intrinsics import CameraCalibrator, calibrate_from_images
+from .calculate_extrinsics import ExtrinsicsCalculator, calibrate_extrinsics_from_keypoints
 from .triangulation_svd import triangulate_with_svd
 from .bundle_adjustment import optimize_with_bundle_adjustment
 from .reprojection import validate_reconstruction
@@ -18,6 +19,8 @@ __all__ = [
     # Calibración
     'CameraCalibrator',
     'calibrate_from_images',
+    'ExtrinsicsCalculator', 
+    'calibrate_extrinsics_from_keypoints',
     
     # Métodos de reconstrucción
     'triangulate_with_svd',

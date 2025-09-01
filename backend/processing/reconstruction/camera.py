@@ -4,7 +4,7 @@ Clase Camera para manejo de parámetros intrínsecos y extrínsecos
 
 import numpy as np
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,38 +14,84 @@ class Camera:
     Clase que representa una cámara con sus parámetros intrínsecos y extrínsecos
     """
     
-    def __init__(self, camera_id: int, camera_matrix: np.ndarray, distortion_coeffs: np.ndarray, 
-                 serial_number: str, resolution: Tuple[int, int], model: str):
-        self.camera_id = camera_id
-        self.camera_matrix = camera_matrix.copy()
-        self.distortion_coeffs = distortion_coeffs.copy()
-        self.serial_number = serial_number
-        self.resolution = resolution
-        self.model = model
+    def __init__(self, camera_id: int, camera_matrix: Optional[np.ndarray] = None, 
+                 distortion_coeffs: Optional[np.ndarray] = None, 
+                 serial_number: Optional[str] = None, resolution: Optional[Tuple[int, int]] = None, 
+                 model: Optional[str] = None):
         
-        # Parámetros extrínsecos (se calculan durante calibración)
+        self.camera_id = camera_id
+        
+        # Si no se proporcionan parámetros, cargar desde configuración
+        if camera_matrix is None or distortion_coeffs is None:
+            intrinsics = self._load_intrinsics_from_config(camera_id)
+            self.camera_matrix = intrinsics['camera_matrix'].copy()
+            self.distortion_coeffs = intrinsics['distortion_coeffs'].copy()
+            self.serial_number = intrinsics['serial_number']
+            self.resolution = intrinsics['resolution']
+            self.model = intrinsics['model']
+        else:
+            self.camera_matrix = camera_matrix.copy()
+            self.distortion_coeffs = distortion_coeffs.copy()
+            self.serial_number = serial_number or f"Unknown_{camera_id}"
+            self.resolution = resolution or (640, 480)
+            self.model = model or "Unknown"
+        
+        # Parámetros extrínsecos (se calculan durante calibración del sistema)
         self.rotation_matrix = np.eye(3, dtype=np.float64)
         self.translation_vector = np.zeros(3, dtype=np.float64)
-        self.is_calibrated = False
+        self.is_calibrated = False  # Los extrínsecos NO están calibrados por defecto
         
-        # Si es cámara 0, es la referencia
-        if camera_id == 0:
-            self.is_reference = True
-            self.is_calibrated = True
-        else:
-            self.is_reference = False
+        # La cámara de referencia se establece durante la calibración del sistema
+        self.is_reference = False
+        
+        logger.info(f"Cámara {camera_id} inicializada con parámetros intrínsecos")
+    
+    def _load_intrinsics_from_config(self, camera_id: int) -> Dict:
+        """Cargar parámetros intrínsecos desde configuración"""
+        try:
+            from config.camera_intrinsics import CAMERA_INTRINSICS
+            camera_key = f"camera_{camera_id}"
+            
+            if camera_key in CAMERA_INTRINSICS:
+                logger.info(f"Cargando parámetros intrínsecos para cámara {camera_id} desde configuración")
+                return CAMERA_INTRINSICS[camera_key]
+            else:
+                logger.warning(f"No se encontraron parámetros para cámara {camera_id}, usando valores por defecto")
+                # Valores por defecto para Orbbec Gemini 335Le
+                return {
+                    'camera_matrix': np.array([
+                        [618.2, 0.0, 320.0],
+                        [0.0, 618.2, 240.0],
+                        [0.0, 0.0, 1.0]
+                    ], dtype=np.float64),
+                    'distortion_coeffs': np.array([0.08, -0.15, 0.001, -0.002, 0.03], dtype=np.float64),
+                    'serial_number': f"Unknown_{camera_id}",
+                    'resolution': (640, 480),
+                    'model': "Orbbec Gemini 335Le"
+                }
+        except ImportError as e:
+            logger.error(f"Error importando configuración de cámaras: {e}")
+            raise
+    
+    def set_as_reference(self):
+        """Establecer esta cámara como referencia del sistema"""
+        self.is_reference = True
+        self.rotation_matrix = np.eye(3, dtype=np.float64)
+        self.translation_vector = np.zeros(3, dtype=np.float64)
+        self.is_calibrated = True
+        logger.info(f"Cámara {self.camera_id} establecida como referencia del sistema")
     
     def set_extrinsics(self, rotation_matrix: np.ndarray, translation_vector: np.ndarray):
         """Establecer parámetros extrínsecos respecto a cámara de referencia"""
         self.rotation_matrix = rotation_matrix.copy()
         self.translation_vector = translation_vector.copy()
         self.is_calibrated = True
-        logger.info(f"Cámara {self.camera_id} calibrada exitosamente")
+        logger.info(f"Parámetros extrínsecos establecidos para cámara {self.camera_id}")
     
     def get_projection_matrix(self) -> np.ndarray:
         """Obtener matriz de proyección P = K[R|t]"""
         if not self.is_calibrated:
-            logger.warning(f"Cámara {self.camera_id} no está calibrada")
+            logger.warning(f"Cámara {self.camera_id} no tiene extrínsecos calibrados")
         
         # Construir matriz [R|t]
         extrinsic_matrix = np.hstack((self.rotation_matrix, self.translation_vector.reshape(3, 1)))
@@ -162,14 +208,45 @@ class CameraSystem:
     
     def __init__(self):
         self.cameras: Dict[int, Camera] = {}
-        self.reference_camera_id = 0
+        self.reference_camera_id: Optional[int] = None
     
     def add_camera(self, camera: Camera):
         """Añadir cámara al sistema"""
         self.cameras[camera.camera_id] = camera
-        if camera.is_reference:
-            self.reference_camera_id = camera.camera_id
         logger.info(f"Cámara {camera.camera_id} añadida al sistema")
+    
+    def set_reference_camera(self, camera_id: int):
+        """Establecer cámara de referencia para extrínsecos"""
+        if camera_id not in self.cameras:
+            raise ValueError(f"Cámara {camera_id} no existe en el sistema")
+        
+        # Resetear referencia anterior
+        if self.reference_camera_id is not None:
+            old_ref = self.cameras[self.reference_camera_id]
+            old_ref.is_reference = False
+            old_ref.is_calibrated = False
+        
+        # Establecer nueva referencia
+        self.reference_camera_id = camera_id
+        reference_camera = self.cameras[camera_id]
+        reference_camera.set_as_reference()
+        
+        logger.info(f"Cámara {camera_id} establecida como referencia del sistema")
+    
+    def initialize_from_config(self, camera_ids: List[int], reference_id: int = 0):
+        """Inicializar cámaras desde configuración y establecer referencia"""
+        for camera_id in camera_ids:
+            camera = Camera(camera_id)
+            self.add_camera(camera)
+        
+        # Establecer cámara de referencia
+        if reference_id in camera_ids:
+            self.set_reference_camera(reference_id)
+        else:
+            # Si no está el ID solicitado, usar el primero disponible
+            self.set_reference_camera(camera_ids[0])
+        
+        logger.info(f"Sistema inicializado con {len(camera_ids)} cámaras, referencia: {self.reference_camera_id}")
     
     def get_camera(self, camera_id: int) -> Optional[Camera]:
         """Obtener cámara por ID"""
