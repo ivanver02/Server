@@ -37,7 +37,6 @@ class EnsembleProcessor:
         
         logger.info(f"EnsembleProcessor inicializado con {len(self.final_keypoint_names)} keypoints finales")
         logger.info(f"Keypoints finales: {self.final_keypoint_names}")
-        logger.info(f"Configuración ensemble: umbral_confianza={ensemble_config.confidence_threshold}, min_detectores={ensemble_config.min_detectors_required}")
     
     def _generate_final_keypoint_names(self) -> List[str]:
         """
