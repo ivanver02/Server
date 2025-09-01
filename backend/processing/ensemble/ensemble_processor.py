@@ -37,7 +37,6 @@ class EnsembleProcessor:
         
         logger.info(f"EnsembleProcessor inicializado con {len(self.final_keypoint_names)} keypoints finales")
         logger.info(f"Keypoints finales: {self.final_keypoint_names}")
-        logger.info(f"Configuración ensemble: umbral_confianza={ensemble_config.confidence_threshold}, min_detectores={ensemble_config.min_detectors_required}")
     
     def _generate_final_keypoint_names(self) -> List[str]:
         """
@@ -179,6 +178,7 @@ class EnsembleProcessor:
                 return
             
             # Procesar ensemble para cada chunk y cada cámara
+            total_processed = 0 
             for chunk_num in range(max_chunk + 1):
                 logger.info(f" Procesando chunk {chunk_num}/{max_chunk}")
                 chunk_processed_count = 0
@@ -318,50 +318,50 @@ class EnsembleProcessor:
         except Exception as e:
             logger.error(f"Error guardando frame {frame_number}_{chunk_number}: {e}")
     
-def _combine_keypoints(self, frame_keypoints: Dict[str, dict]) -> Optional[Dict[str, np.ndarray]]:
-        """
-        Combina keypoints de todos los detectores usando combinación lineal ponderada por la confianza real y la ponderación de cada detector.
-        Devuelve un diccionario: {coordinates: array(N,2), confidence: array(N)}
-        """
-        try:
-            num_final_keypoints = len(self.final_keypoint_names)
-            coordinates_array = np.zeros((num_final_keypoints, 2))
-            confidence_array = np.zeros(num_final_keypoints)
+    def _combine_keypoints(self, frame_keypoints: Dict[str, dict]) -> Optional[Dict[str, np.ndarray]]:
+            """
+            Combina keypoints de todos los detectores usando combinación lineal ponderada por la confianza real y la ponderación de cada detector.
+            Devuelve un diccionario: {coordinates: array(N,2), confidence: array(N)}
+            """
+            try:
+                num_final_keypoints = len(self.final_keypoint_names)
+                coordinates_array = np.zeros((num_final_keypoints, 2))
+                confidence_array = np.zeros(num_final_keypoints)
 
-            for final_kp_idx in range(num_final_keypoints):
-                weighted_coords = np.zeros(2)
-                weighted_conf = 0.0
-                total_weight = 0.0
+                for final_kp_idx in range(num_final_keypoints):
+                    weighted_coords = np.zeros(2)
+                    weighted_conf = 0.0
+                    total_weight = 0.0
 
-                for detector_name, detector_data in frame_keypoints.items():
-                    if detector_name not in self.detector_instances:
-                        continue
-                    detector_instance = self.detector_instances[detector_name]
-                    confidence_weights = detector_instance.ensemble_confidence_weights
-                    detector_kp_idx = detector_instance.final_keypoints_idx.get(final_kp_idx, None)
-                    if (
-                        detector_kp_idx is not None and
-                        detector_kp_idx < len(confidence_weights) and
-                        detector_kp_idx < detector_data['coordinates'].shape[0] and
-                        detector_kp_idx < detector_data['confidence'].shape[0]
-                    ):
-                        model_confidence = detector_data['confidence'][detector_kp_idx]
-                        ensemble_weight = confidence_weights[detector_kp_idx]
-                        if ensemble_weight > 0 and model_confidence > 0:
-                            coord = detector_data['coordinates'][detector_kp_idx, :2]
-                            weighted_coords += ensemble_weight * model_confidence * coord
-                            weighted_conf += ensemble_weight * model_confidence
-                            total_weight += ensemble_weight
+                    for detector_name, detector_data in frame_keypoints.items():
+                        if detector_name not in self.detector_instances:
+                            continue
+                        detector_instance = self.detector_instances[detector_name]
+                        confidence_weights = detector_instance.ensemble_confidence_weights
+                        detector_kp_idx = detector_instance.final_keypoints_idx.get(final_kp_idx, None)
+                        if (
+                            detector_kp_idx is not None and
+                            detector_kp_idx < len(confidence_weights) and
+                            detector_kp_idx < detector_data['coordinates'].shape[0] and
+                            detector_kp_idx < detector_data['confidence'].shape[0]
+                        ):
+                            model_confidence = detector_data['confidence'][detector_kp_idx]
+                            ensemble_weight = confidence_weights[detector_kp_idx]
+                            if ensemble_weight > 0 and model_confidence > 0:
+                                coord = detector_data['coordinates'][detector_kp_idx, :2]
+                                weighted_coords += ensemble_weight * model_confidence * coord
+                                weighted_conf += ensemble_weight * model_confidence
+                                total_weight += ensemble_weight
 
-                if total_weight > 0:
-                    coordinates_array[final_kp_idx] = weighted_coords / weighted_conf if weighted_conf > 0 else np.zeros(2)
-                    confidence_array[final_kp_idx] = weighted_conf / total_weight
-                else:
-                    coordinates_array[final_kp_idx] = np.zeros(2)
-                    confidence_array[final_kp_idx] = 0.0
+                    if total_weight > 0:
+                        coordinates_array[final_kp_idx] = weighted_coords / weighted_conf if weighted_conf > 0 else np.zeros(2)
+                        confidence_array[final_kp_idx] = weighted_conf / total_weight
+                    else:
+                        coordinates_array[final_kp_idx] = np.zeros(2)
+                        confidence_array[final_kp_idx] = 0.0
 
-            return {'coordinates': coordinates_array, 'confidence': confidence_array}
+                return {'coordinates': coordinates_array, 'confidence': confidence_array}
 
-        except Exception as e:
-            logger.error(f"Error combinando keypoints: {e}")
-            return None
+            except Exception as e:
+                logger.error(f"Error combinando keypoints: {e}")
+                return None
