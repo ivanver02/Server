@@ -66,7 +66,6 @@ class BasePoseDetector(ABC):
             # Verificar archivo de pesos
             if not pose2d_weights_path.exists():
                 logger.error(f"Weights file not found: {pose2d_weights_path}")
-                print("Please download the required model weights and place them in the checkpoints directory.")
                 return False
             
             # Inicializar el inferenciador
@@ -83,7 +82,6 @@ class BasePoseDetector(ABC):
             
         except Exception as e:
             logger.error(f"Error initializing {self.model_name} detector: {e}")
-            print(f"Exception occurred during initialization for {self.model_name}.")
             return False
     
     def process_chunk(self, video_path: Path, patient_id: str, session_id: str, 
