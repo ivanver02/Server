@@ -69,9 +69,13 @@ Server/
 │   │                           └── confidence.npy
 │   ├── processed/
 │   │   ├── 2D_keypoints/
-│   │   │   └── <paciente>/<sesion>/<camara>/<detector>/keypoints2D.npy
+│   │   │   └── <paciente>/<sesion>/<camara>/
+│   │   │       ├── coordinates/
+│   │   │       │   └── {frame_id}_{chunk_id}.npy
+│   │   │       └── confidence/
+│   │   │           └── {frame_id}_{chunk_id}.npy
 │   │   ├── 3D_keypoints/
-│   │   │   └── <paciente>/<sesion>/keypoints3D.npy
+│   │   │   └── <paciente>/<sesion>/{frame_id}_{chunk_id}.npy
 │   │   ├── annotated_videos/
 │   │   │   └── <paciente>/<sesion>/<camara>/<detector>/video_annotated.mp4
 │   │   └── photos_from_video/
@@ -187,7 +191,7 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 ## Testing
 
 <div style="background-color:#fffde7; border-left:6px solid #fbc02d; padding:10px; margin-bottom:10px;">
-<strong>Consejo:</strong> Utiliza la carpeta [`testing`](testing) para prototipos y pruebas manuales antes de integrar cambios en el sistema principal.
+<strong>Consejo:</strong> Utiliza la carpeta de testing para prototipos y pruebas manuales antes de integrar cambios en el sistema principal.
 </div>
 
 La carpeta [`testing`](testing) no está pensada para pruebas automáticas, sino como espacio para desarrollar código aislado que posteriormente se integra en el proyecto principal.
