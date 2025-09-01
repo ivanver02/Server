@@ -1,31 +1,22 @@
-# Módulo de reconstrucción 3D de keypoints
-from .coordinator import ReconstructionCoordinator, reconstruct_patient_session
-from .camera import Camera, CameraSystem
-from .calculate_intrinsics import CameraCalibrator, calibrate_from_images
-from .calculate_extrinsics import ExtrinsicsCalculator, calibrate_extrinsics_from_keypoints
-from .triangulation_svd import triangulate_with_svd
-from .bundle_adjustment import optimize_with_bundle_adjustment
-from .reprojection import validate_reconstruction
+"""
+Sistema de reconstrucción 3D para cámaras Orbbec Gemini 335Le.
+
+Módulos:
+- camera: Clase Camera para gestión de parámetros intrínsecos y extrínsecos
+- calculate_extrinsics: Cálculo preciso de parámetros extrínsecos desde keypoints 2D
+- triangulation: Triangulación SVD rápida y Bundle Adjustment preciso
+- validation: Validación por reproyección de puntos 3D
+"""
+
+from .camera import Camera
+from .calculate_extrinsics import calculate_extrinsics_from_keypoints
+from .triangulation import triangulate_svd, triangulate_bundle_adjustment
+from .validation import validate_reprojection
 
 __all__ = [
-    # Coordinator principal
-    'ReconstructionCoordinator',
-    'reconstruct_patient_session',
-    
-    # Sistema de cámaras
     'Camera',
-    'CameraSystem',
-    
-    # Calibración
-    'CameraCalibrator',
-    'calibrate_from_images',
-    'ExtrinsicsCalculator', 
-    'calibrate_extrinsics_from_keypoints',
-    
-    # Métodos de reconstrucción
-    'triangulate_with_svd',
-    'optimize_with_bundle_adjustment',
-    
-    # Validación
-    'validate_reconstruction',
+    'calculate_extrinsics_from_keypoints', 
+    'triangulate_svd',
+    'triangulate_bundle_adjustment',
+    'validate_reprojection'
 ]

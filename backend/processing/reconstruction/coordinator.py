@@ -1,370 +1,259 @@
 """
-Coordinador principal de reconstrucción 3D
+Coordinador principal del sistema de reconstrucción 3D.
+Integra todos los módulos y procesa datos de una sesión completa.
 """
 
 import numpy as np
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+import os
+import glob
 import logging
+from typing import Dict, List, Tuple, Optional
+from pathlib import Path
 
-from .camera import CameraSystem
-from .calculate_intrinsics import CameraCalibrator, calibrate_from_images
-from .calculate_extrinsics import calibrate_extrinsics_from_keypoints
-from .triangulation_svd import triangulate_with_svd
-from .bundle_adjustment import optimize_with_bundle_adjustment
-from .reprojection import validate_reconstruction
-from config.camera_intrinsics import CAMERA_INTRINSICS
+from .camera import Camera
+from .calculate_extrinsics import calculate_extrinsics_from_keypoints
+from .triangulation import triangulate_svd, triangulate_bundle_adjustment
+from .validation import validate_reprojection, calculate_reconstruction_quality_score
 
 logger = logging.getLogger(__name__)
 
-class ReconstructionCoordinator:
+def reconstruct_3d_keypoints(
+    keypoints_2d_dir: str,
+    output_dir: str,
+    patient_id: str,
+    session_id: str,
+    use_bundle_adjustment: bool = True,
+    validation_plots: bool = False
+) -> Dict:
     """
-    Coordinador principal para reconstrucción 3D de keypoints
+    Reconstruye keypoints 3D para una sesión completa de paciente.
+    
+    Args:
+        keypoints_2d_dir: Directorio con keypoints 2D procesados
+        output_dir: Directorio base para guardar keypoints 3D
+        patient_id: ID del paciente
+        session_id: ID de la sesión
+        use_bundle_adjustment: Si usar Bundle Adjustment (más lento pero preciso)
+        validation_plots: Si generar plots de validación
+        
+    Returns:
+        Dict con estadísticas del procesamiento
     """
     
-    def __init__(self, base_data_dir: Path):
-        self.base_data_dir = Path(base_data_dir)
-        self.camera_system: Optional[CameraSystem] = None
-        self.reconstruction_method = "svd"  # "svd" o "bundle_adjustment"
-        
-        # Parámetros de reconstrucción
-        self.confidence_threshold = 0.3
-        self.min_cameras = 2
-        self.max_reprojection_error = 5.0
-        
-        # Directorios
-        self.calibration_dir = self.base_data_dir / "calibration"
-        self.reconstruction_3d_dir = self.base_data_dir / "processed" / "3D_keypoints"
-        
-    def initialize_camera_system(self, camera_ids: List[int], 
-                                use_calibration: bool = True) -> bool:
-        """
-        Inicializar sistema de cámaras
-        
-        Args:
-            camera_ids: Lista de IDs de cámaras detectadas
-            use_calibration: Si usar calibración guardada o configuración por defecto
-        """
-        try:
-            if use_calibration and self.calibration_dir.exists():
-                # Cargar calibración existente
-                try:
-                    self.camera_system = CameraSystem.load_system(self.calibration_dir)
-                    logger.info("Sistema de cámaras cargado desde calibración guardada")
-                    return True
-                except Exception as e:
-                    logger.warning(f"No se pudo cargar calibración guardada: {e}")
-            
-            # Usar configuración por defecto
-            calibrator = CameraCalibrator(self.base_data_dir)
-            calibrator.initialize_cameras_from_config(camera_ids, reference_id=camera_ids[0])
-            self.camera_system = calibrator.get_camera_system()
-            
-            logger.info(f"Sistema de cámaras inicializado con configuración por defecto para {camera_ids}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error inicializando sistema de cámaras: {e}")
-            return False
+    logger.info(f"Iniciando reconstrucción 3D para paciente {patient_id}, sesión {session_id}")
     
-    def calibrate_cameras(self, calibration_images_dir: Path, 
-                         camera_ids: List[int]) -> bool:
-        """
-        Calibrar sistema de cámaras usando imágenes de calibración
-        """
+    # Crear directorio de salida
+    session_output_dir = os.path.join(output_dir, patient_id, session_id)
+    os.makedirs(session_output_dir, exist_ok=True)
+    
+    # Encontrar archivos de keypoints 2D
+    keypoints_pattern = os.path.join(keypoints_2d_dir, patient_id, session_id, "*.npy")
+    keypoint_files = glob.glob(keypoints_pattern)
+    
+    if not keypoint_files:
+        raise FileNotFoundError(f"No se encontraron archivos de keypoints 2D en: {keypoints_pattern}")
+    
+    logger.info(f"Encontrados {len(keypoint_files)} archivos de keypoints 2D")
+    
+    # Inicializar cámaras
+    cameras = {}
+    for camera_id in ["camera_0", "camera_1", "camera_2"]:
+        cameras[camera_id] = Camera(camera_id)
+    
+    # Estadísticas de procesamiento
+    stats = {
+        "patient_id": patient_id,
+        "session_id": session_id,
+        "files_processed": 0,
+        "files_total": len(keypoint_files),
+        "points_reconstructed": 0,
+        "average_quality_score": 0.0,
+        "method_used": "bundle_adjustment" if use_bundle_adjustment else "svd",
+        "extrinsics_calculated": False,
+        "validation_results": {}
+    }
+    
+    extrinsics_calculated = False
+    quality_scores = []
+    
+    for file_idx, keypoint_file in enumerate(sorted(keypoint_files)):
         try:
-            self.camera_system = calibrate_from_images(
-                self.base_data_dir, calibration_images_dir, camera_ids
+            # Extraer frame_id y chunk_id del nombre del archivo
+            filename = Path(keypoint_file).stem
+            # Formato esperado: {frame_id}_{chunk_id}
+            
+            logger.info(f"Procesando archivo {file_idx+1}/{len(keypoint_files)}: {filename}")
+            
+            # Cargar keypoints 2D
+            keypoints_data = np.load(keypoint_file, allow_pickle=True).item()
+            
+            if not isinstance(keypoints_data, dict):
+                logger.warning(f"Formato inválido en {filename}, saltando")
+                continue
+            
+            # Verificar que tenemos datos de múltiples cámaras
+            available_cameras = [cam for cam in ["camera_0", "camera_1", "camera_2"] if cam in keypoints_data]
+            
+            if len(available_cameras) < 2:
+                logger.warning(f"Insuficientes cámaras en {filename} ({len(available_cameras)} < 2), saltando")
+                continue
+            
+            # Calcular extrínsecos solo una vez (usar primer archivo válido)
+            if not extrinsics_calculated:
+                logger.info("Calculando parámetros extrínsecos...")
+                
+                keypoints_2d_for_extrinsics = {}
+                for cam_id in available_cameras:
+                    keypoints_2d_for_extrinsics[cam_id] = keypoints_data[cam_id]
+                
+                extrinsics = calculate_extrinsics_from_keypoints(
+                    cameras, keypoints_2d_for_extrinsics
+                )
+                
+                # Actualizar cámaras con extrínsecos calculados
+                for cam_id, (R, t) in extrinsics.items():
+                    cameras[cam_id].set_extrinsics(R, t)
+                
+                extrinsics_calculated = True
+                stats["extrinsics_calculated"] = True
+                logger.info("Parámetros extrínsecos calculados exitosamente")
+            
+            # Reconstruir puntos 3D
+            if use_bundle_adjustment:
+                # Usar Bundle Adjustment para máxima precisión
+                points_3d, confidence, ba_info = triangulate_bundle_adjustment(
+                    cameras, keypoints_data
+                )
+                reconstruction_method = "bundle_adjustment"
+            else:
+                # Usar SVD para velocidad
+                points_3d, confidence = triangulate_svd(cameras, keypoints_data)
+                reconstruction_method = "svd"
+            
+            if len(points_3d) == 0:
+                logger.warning(f"No se pudieron reconstruir puntos 3D para {filename}")
+                continue
+            
+            # Validar calidad de reconstrucción
+            validation_results = validate_reprojection(
+                cameras, points_3d, keypoints_data,
+                save_plots=validation_plots,
+                output_dir=session_output_dir if validation_plots else None
             )
             
-            if self.camera_system.is_system_calibrated():
-                logger.info("Sistema de cámaras calibrado exitosamente")
-                return True
-            else:
-                logger.error("Falló la calibración del sistema de cámaras")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error en calibración: {e}")
-            return False
-    
-    def load_keypoints_data(self, patient_id: str, session_id: str) -> Tuple[Dict, Dict]:
-        """
-        Cargar datos de keypoints 2D del ensemble para una sesión
-        
-        Returns:
-            Tuple (keypoints_2d, confidences_2d) donde cada uno es:
-            Dict {camera_id: {frame_key: array}}
-        """
-        keypoints_2d = {}
-        confidences_2d = {}
-        
-        session_dir = self.base_data_dir / "processed" / "2D_keypoints" / f"patient{patient_id}" / f"session{session_id}"
-        
-        if not session_dir.exists():
-            logger.error(f"No se encontró directorio de sesión: {session_dir}")
-            return keypoints_2d, confidences_2d
-        
-        # Buscar directorios de cámaras
-        for camera_dir in session_dir.iterdir():
-            if camera_dir.is_dir() and camera_dir.name.startswith('camera'):
-                try:
-                    camera_id = int(camera_dir.name.replace('camera', ''))
-                    
-                    coordinates_dir = camera_dir / "coordinates"
-                    confidence_dir = camera_dir / "confidence"
-                    
-                    if coordinates_dir.exists() and confidence_dir.exists():
-                        camera_keypoints = {}
-                        camera_confidences = {}
-                        
-                        # Cargar archivos de coordenadas
-                        for coord_file in coordinates_dir.glob("*.npy"):
-                            frame_key = coord_file.stem  # formato: frame_chunk
-                            coordinates = np.load(coord_file)
-                            
-                            # Buscar archivo de confianza correspondiente
-                            conf_file = confidence_dir / coord_file.name
-                            if conf_file.exists():
-                                confidence = np.load(conf_file)
-                                
-                                camera_keypoints[frame_key] = coordinates
-                                camera_confidences[frame_key] = confidence
-                        
-                        if camera_keypoints:
-                            keypoints_2d[camera_id] = camera_keypoints
-                            confidences_2d[camera_id] = camera_confidences
-                            logger.debug(f"Cargados {len(camera_keypoints)} frames de cámara {camera_id}")
-                
-                except ValueError:
-                    logger.warning(f"Nombre de directorio inválido: {camera_dir.name}")
-        
-        logger.info(f"Cargados keypoints de {len(keypoints_2d)} cámaras para patient{patient_id}/session{session_id}")
-        return keypoints_2d, confidences_2d
-    
-    def reconstruct_3d(self, patient_id: str, session_id: str, 
-                      method: str = "svd") -> bool:
-        """
-        Realizar reconstrucción 3D completa para una sesión
-        
-        Args:
-            patient_id: ID del paciente
-            session_id: ID de la sesión
-            method: Método de reconstrucción ("svd" o "bundle_adjustment")
-        """
-        if self.camera_system is None:
-            logger.error("Sistema de cámaras no inicializado")
-            return False
-        
-        if not self.camera_system.is_system_calibrated():
-            logger.error("Sistema de cámaras no calibrado")
-            return False
-        
-        # Cargar datos de keypoints 2D
-        keypoints_2d, confidences_2d = self.load_keypoints_data(patient_id, session_id)
-        
-        if not keypoints_2d:
-            logger.error("No se pudieron cargar keypoints 2D")
-            return False
-        
-        logger.info(f"Iniciando reconstrucción 3D con método: {method}")
-        
-        try:
-            if method == "svd":
-                # Triangulación con SVD
-                points_3d_sequence = triangulate_with_svd(
-                    self.camera_system,
-                    keypoints_2d,
-                    confidences_2d,
-                    self.confidence_threshold,
-                    self.min_cameras,
-                    self.max_reprojection_error
-                )
-                
-            elif method == "bundle_adjustment":
-                # Primero triangulación inicial con SVD
-                initial_3d = triangulate_with_svd(
-                    self.camera_system,
-                    keypoints_2d,
-                    confidences_2d,
-                    self.confidence_threshold,
-                    self.min_cameras,
-                    self.max_reprojection_error
-                )
-                
-                # Extraer solo coordenadas (sin confianzas) para bundle adjustment
-                initial_points_only = {frame_key: coords for frame_key, (coords, _) in initial_3d.items()}
-                
-                # Optimización con Bundle Adjustment
-                points_3d_sequence = optimize_with_bundle_adjustment(
-                    self.camera_system,
-                    keypoints_2d,
-                    confidences_2d,
-                    initial_points_only,
-                    optimize_cameras=False,
-                    confidence_threshold=self.confidence_threshold
-                )
-                
-                # Convertir formato para consistencia
-                points_3d_sequence = {frame_key: (coords, np.ones(coords.shape[0])) 
-                                    for frame_key, coords in points_3d_sequence.items()}
+            quality_score = calculate_reconstruction_quality_score(validation_results)
+            quality_scores.append(quality_score)
             
-            else:
-                logger.error(f"Método de reconstrucción no válido: {method}")
-                return False
+            # Guardar keypoints 3D
+            output_file = os.path.join(session_output_dir, f"{filename}.npy")
             
-            # Guardar resultados 3D
-            success = self._save_3d_keypoints(points_3d_sequence, patient_id, session_id)
+            # Estructura de datos para guardar
+            output_data = {
+                "points_3d": points_3d,
+                "confidence": confidence,
+                "reconstruction_method": reconstruction_method,
+                "quality_score": quality_score,
+                "validation_results": validation_results,
+                "frame_info": {
+                    "filename": filename,
+                    "cameras_used": available_cameras,
+                    "num_points": len(points_3d)
+                }
+            }
             
-            if success:
-                # Validar reconstrucción
-                logger.info("Validando reconstrucción...")
-                
-                # Extraer solo coordenadas para validación
-                points_only = {frame_key: coords for frame_key, (coords, _) in points_3d_sequence.items()}
-                
-                validation_results = validate_reconstruction(
-                    self.camera_system,
-                    points_only,
-                    keypoints_2d,
-                    confidences_2d,
-                    self.confidence_threshold,
-                    save_visualizations=True,
-                    output_dir=self.base_data_dir / "processed" / "validation" / f"patient{patient_id}" / f"session{session_id}"
-                )
-                
-                logger.info(f"Reconstrucción 3D completada exitosamente para patient{patient_id}/session{session_id}")
-                return True
-            else:
-                logger.error("Error guardando resultados de reconstrucción")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error en reconstrucción 3D: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
-    def _save_3d_keypoints(self, points_3d_sequence: Dict[str, Tuple[np.ndarray, np.ndarray]], 
-                          patient_id: str, session_id: str) -> bool:
-        """
-        Guardar keypoints 3D reconstruidos
-        
-        Args:
-            points_3d_sequence: Dict {frame_key: (coordinates, confidences)}
-        """
-        try:
-            output_dir = self.reconstruction_3d_dir / f"patient{patient_id}" / f"session{session_id}"
-            output_dir.mkdir(parents=True, exist_ok=True)
+            if use_bundle_adjustment and 'ba_info' in locals():
+                output_data["bundle_adjustment_info"] = ba_info
             
-            saved_count = 0
+            np.save(output_file, output_data)
             
-            for frame_key, (coordinates_3d, confidences_3d) in points_3d_sequence.items():
-                # Guardar coordenadas
-                coord_file = output_dir / f"{frame_key}.npy"
-                np.save(coord_file, coordinates_3d)
-                
-                # Guardar confianzas (opcional)
-                conf_file = output_dir / f"{frame_key}_confidence.npy"
-                np.save(conf_file, confidences_3d)
-                
-                saved_count += 1
+            stats["files_processed"] += 1
+            stats["points_reconstructed"] += len(points_3d)
             
-            logger.info(f"Guardados {saved_count} frames de keypoints 3D en {output_dir}")
-            return True
+            logger.info(f"Archivo {filename} procesado: {len(points_3d)} puntos 3D, "
+                       f"calidad: {quality_score:.1f}/100")
             
         except Exception as e:
-            logger.error(f"Error guardando keypoints 3D: {e}")
-            return False
+            logger.error(f"Error procesando {keypoint_file}: {e}")
+            continue
     
-    def set_reconstruction_parameters(self, confidence_threshold: float = 0.3,
-                                    min_cameras: int = 2, 
-                                    max_reprojection_error: float = 5.0,
-                                    method: str = "svd"):
-        """Configurar parámetros de reconstrucción"""
-        self.confidence_threshold = confidence_threshold
-        self.min_cameras = min_cameras
-        self.max_reprojection_error = max_reprojection_error
-        self.reconstruction_method = method
-        
-        logger.info(f"Parámetros de reconstrucción: conf_threshold={confidence_threshold}, "
-                   f"min_cameras={min_cameras}, max_error={max_reprojection_error}, method={method}")
+    # Estadísticas finales
+    if quality_scores:
+        stats["average_quality_score"] = float(np.mean(quality_scores))
+        stats["min_quality_score"] = float(np.min(quality_scores))
+        stats["max_quality_score"] = float(np.max(quality_scores))
     
-    def get_available_sessions(self) -> List[Tuple[str, str]]:
-        """Obtener lista de sesiones disponibles para reconstrucción"""
-        sessions = []
-        keypoints_dir = self.base_data_dir / "processed" / "2D_keypoints"
-        
-        if keypoints_dir.exists():
-            for patient_dir in keypoints_dir.iterdir():
-                if patient_dir.is_dir() and patient_dir.name.startswith('patient'):
-                    patient_id = patient_dir.name.replace('patient', '')
-                    
-                    for session_dir in patient_dir.iterdir():
-                        if session_dir.is_dir() and session_dir.name.startswith('session'):
-                            session_id = session_dir.name.replace('session', '')
-                            sessions.append((patient_id, session_id))
-        
-        return sessions
+    # Guardar estadísticas de la sesión
+    stats_file = os.path.join(session_output_dir, "reconstruction_stats.npy")
+    np.save(stats_file, stats)
     
-    def calibrate_extrinsics_from_keypoints(self, patient_id: str, session_id: str,
-                                           method: str = "pnp", 
-                                           min_confidence: float = 0.3) -> bool:
-        """
-        Calibrar extrínsecos usando keypoints 2D de una sesión específica
-        
-        Args:
-            patient_id: ID del paciente
-            session_id: ID de la sesión  
-            method: Método de cálculo ("pnp" o "optimization")
-            min_confidence: Confianza mínima para keypoints válidos
-        """
-        if self.camera_system is None:
-            logger.error("Sistema de cámaras no inicializado")
-            return False
-            
-        # Cargar datos de keypoints 2D
-        keypoints_2d, confidences_2d = self.load_keypoints_data(patient_id, session_id)
-        
-        if not keypoints_2d:
-            logger.error("No se pudieron cargar keypoints 2D para calibración")
-            return False
-        
-        logger.info(f"Calibrando extrínsecos usando datos de patient{patient_id}/session{session_id}")
-        
-        # Calibrar extrínsecos
-        success = calibrate_extrinsics_from_keypoints(
-            self.camera_system,
-            keypoints_2d, 
-            confidences_2d,
-            method=method,
-            min_confidence=min_confidence
+    logger.info(f"Reconstrucción completada: {stats['files_processed']}/{stats['files_total']} archivos, "
+               f"{stats['points_reconstructed']} puntos 3D, calidad promedio: {stats['average_quality_score']:.1f}/100")
+    
+    return stats
+
+
+def test_reconstruction_with_sample_data():
+    """
+    Prueba el sistema de reconstrucción con datos del paciente 1, sesión 8.
+    """
+    
+    # Configurar logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Directorios de datos
+    keypoints_2d_dir = r"c:\Users\Juan Cantizani\Server\data\processed\2D_keypoints"
+    output_3d_dir = r"c:\Users\Juan Cantizani\Server\data\processed\3D_keypoints"
+    
+    patient_id = "1"
+    session_id = "8"
+    
+    try:
+        # Ejecutar reconstrucción con Bundle Adjustment
+        logger.info("=== Prueba con Bundle Adjustment ===")
+        stats_ba = reconstruct_3d_keypoints(
+            keypoints_2d_dir=keypoints_2d_dir,
+            output_dir=output_3d_dir,
+            patient_id=patient_id,
+            session_id=session_id,
+            use_bundle_adjustment=True,
+            validation_plots=True  # Generar plots para análisis
         )
         
-        if success:
-            logger.info("Extrínsecos calibrados exitosamente desde keypoints 2D")
-            
-            # Guardar calibración actualizada
-            calibration_dir = self.base_data_dir / "calibration"
-            self.camera_system.save_system(calibration_dir)
-            logger.info(f"Calibración guardada en {calibration_dir}")
-            
-            return True
-        else:
-            logger.error("Falló la calibración de extrínsecos")
-            return False
+        print(f"\n=== RESULTADOS BUNDLE ADJUSTMENT ===")
+        print(f"Archivos procesados: {stats_ba['files_processed']}/{stats_ba['files_total']}")
+        print(f"Puntos 3D reconstruidos: {stats_ba['points_reconstructed']}")
+        print(f"Calidad promedio: {stats_ba['average_quality_score']:.1f}/100")
+        print(f"Extrínsecos calculados: {stats_ba['extrinsics_calculated']}")
+        
+        # Ejecutar reconstrucción con SVD para comparación
+        logger.info("\n=== Prueba con SVD ===")
+        stats_svd = reconstruct_3d_keypoints(
+            keypoints_2d_dir=keypoints_2d_dir,
+            output_dir=output_3d_dir + "_svd",  # Directorio separado
+            patient_id=patient_id,
+            session_id=session_id,
+            use_bundle_adjustment=False,
+            validation_plots=False
+        )
+        
+        print(f"\n=== RESULTADOS SVD ===")
+        print(f"Archivos procesados: {stats_svd['files_processed']}/{stats_svd['files_total']}")
+        print(f"Puntos 3D reconstruidos: {stats_svd['points_reconstructed']}")
+        print(f"Calidad promedio: {stats_svd['average_quality_score']:.1f}/100")
+        
+        # Comparación
+        print(f"\n=== COMPARACIÓN ===")
+        print(f"Bundle Adjustment vs SVD:")
+        print(f"  Calidad: {stats_ba['average_quality_score']:.1f} vs {stats_svd['average_quality_score']:.1f}")
+        print(f"  Puntos: {stats_ba['points_reconstructed']} vs {stats_svd['points_reconstructed']}")
+        
+        return stats_ba, stats_svd
+        
+    except Exception as e:
+        logger.error(f"Error en prueba: {e}")
+        raise
 
-def reconstruct_patient_session(base_data_dir: Path, patient_id: str, session_id: str,
-                               camera_ids: List[int], method: str = "svd",
-                               use_calibration: bool = True) -> bool:
-    """
-    Función principal para reconstruir una sesión específica
-    """
-    coordinator = ReconstructionCoordinator(base_data_dir)
-    
-    # Inicializar sistema de cámaras
-    if not coordinator.initialize_camera_system(camera_ids, use_calibration):
-        return False
-    
-    # Realizar reconstrucción
-    return coordinator.reconstruct_3d(patient_id, session_id, method)
+
+if __name__ == "__main__":
+    # Ejecutar prueba con datos reales
+    test_reconstruction_with_sample_data()
