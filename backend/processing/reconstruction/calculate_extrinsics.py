@@ -62,21 +62,27 @@ def calculate_extrinsics_from_keypoints(
         pts_other = other_keypoints[valid_mask]
         
         try:
-            # Calcular matriz esencial usando las matrices correctas de ambas cámaras
-            # Para mayor precisión, usar las matrices específicas de cada cámara
-            E, mask = cv2.findEssentialMat(
+            # MÉTODO CORRECTO: Usar matriz fundamental primero
+            # cv2.findFundamentalMat trabaja directamente con píxeles
+            F, mask = cv2.findFundamentalMat(
                 pts_ref, pts_other,
-                cameraMatrix=ref_camera.K,
-                method=cv2.RANSAC,
-                prob=0.999,
-                threshold=2.0
+                method=cv2.FM_RANSAC,
+                ransacReprojThreshold=2.0,
+                confidence=0.999
             )
             
-            if E is None:
-                raise ValueError("No se pudo calcular matriz esencial")
+            if F is None:
+                raise ValueError("No se pudo calcular matriz fundamental")
             
-            # Recuperar pose usando la matriz de la cámara objetivo (no la de referencia)
-            inliers, R, t, mask_pose = cv2.recoverPose(E, pts_ref, pts_other, camera.K)
+            # Convertir matriz fundamental a esencial: E = K2^T * F * K1
+            E = camera.K.T @ F @ ref_camera.K
+            
+            # Recuperar pose usando puntos normalizados
+            # Normalizar puntos con las matrices de cámara
+            pts_ref_norm = cv2.undistortPoints(pts_ref.reshape(-1, 1, 2), ref_camera.K, None).reshape(-1, 2)
+            pts_other_norm = cv2.undistortPoints(pts_other.reshape(-1, 1, 2), camera.K, None).reshape(-1, 2)
+            
+            inliers, R, t, mask_pose = cv2.recoverPose(E, pts_ref_norm, pts_other_norm)
             
             if inliers < 8:
                 raise ValueError(f"Pocos inliers: {inliers}")
