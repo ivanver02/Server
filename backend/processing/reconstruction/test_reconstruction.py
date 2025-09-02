@@ -116,7 +116,12 @@ def test_reconstruction_system():
     svd_results = []
     ba_results = []
     
-    for frame_id in sorted(chunk_data.keys()):
+    # DEBUG: procesar solo el primer frame para análisis detallado
+    frame_ids = sorted(chunk_data.keys())
+    frame_ids = frame_ids[:1]  
+    logger.info(f"PROCESANDO SOLO 1 FRAME PARA DEBUG: {frame_ids}")
+    
+    for frame_id in frame_ids:
         frame_keypoints = chunk_data[frame_id]
         
         # Verificar que tenemos al menos 2 cámaras
@@ -126,6 +131,16 @@ def test_reconstruction_system():
             continue
         
         print(f"   Frame {frame_id}: Cámaras {available_cameras}")
+        
+        # Log de ejemplo de keypoints 2D para debug
+        for cam_id in available_cameras[:2]:  # Solo mostrar 2 cámaras
+            kpts = frame_keypoints[cam_id]
+            valid_kpts = kpts[~np.isnan(kpts[:, 0])]
+            logger.info(f"DEBUG - {cam_id}: {len(valid_kpts)} keypoints válidos")
+            if len(valid_kpts) > 0:
+                logger.info(f"  Ejemplo keypoint: {valid_kpts[0]}")
+                logger.info(f"  Rango X: [{valid_kpts[:, 0].min():.1f}, {valid_kpts[:, 0].max():.1f}]")
+                logger.info(f"  Rango Y: [{valid_kpts[:, 1].min():.1f}, {valid_kpts[:, 1].max():.1f}]")
         
         # 4. Calcular extrínsecos
         extrinsics = calculate_extrinsics_from_keypoints(cameras, frame_keypoints)

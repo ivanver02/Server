@@ -62,6 +62,29 @@ def reproject_and_validate(
         # Reproyectar puntos 3D
         reprojected_2d = camera.project_points(valid_points_3d)
         
+        # Log detallado para debug
+        logger.info(f"DEBUG - Cámara {camera_id}:")
+        logger.info(f"  Puntos 3D válidos: {len(valid_points_3d)}")
+        logger.info(f"  Matriz K:\n{camera.K}")
+        logger.info(f"  Matriz R:\n{camera.R}")
+        logger.info(f"  Vector t: {camera.t.flatten()}")
+        
+        # Mostrar algunos ejemplos de puntos
+        if len(valid_points_3d) > 0:
+            logger.info(f"  Ejemplo punto 3D: {valid_points_3d[0]}")
+            logger.info(f"  Ejemplo 2D original: {valid_original_2d[0]}")
+            logger.info(f"  Ejemplo 2D reproyectado: {reprojected_2d[0]}")
+            
+            # Verificar paso a paso la proyección manual del primer punto
+            p3d = valid_points_3d[0]
+            # Transformar a coordenadas de cámara
+            p_cam = camera.R @ p3d + camera.t.flatten()
+            logger.info(f"  Punto en coord. cámara: {p_cam}")
+            # Proyectar
+            p_proj = camera.K @ p_cam
+            p_2d_manual = p_proj[:2] / p_proj[2]
+            logger.info(f"  Proyección manual: {p_2d_manual}")
+        
         # Calcular errores de reproyección
         errors = np.linalg.norm(reprojected_2d - valid_original_2d, axis=1)
         
