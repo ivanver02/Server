@@ -1,7 +1,7 @@
 """Cálculo de error de reproyección por frame."""
 import numpy as np
 from typing import Dict, Tuple
-from .camera import Camera
+from camera import Camera
 
 
 def reprojection_error(points_3d: np.ndarray, cameras: Dict[str, Camera], frame_keypoints: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> Dict[str, float]:

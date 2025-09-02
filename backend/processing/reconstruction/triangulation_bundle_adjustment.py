@@ -2,7 +2,7 @@
 import numpy as np
 from typing import Dict, Tuple
 from scipy.optimize import least_squares
-from .camera import Camera
+from camera import Camera
 
 
 def _residuals(points_3d_flat: np.ndarray, cameras: Dict[str, Camera], frame_keypoints: Dict[str, Tuple[np.ndarray, np.ndarray]], valid_mask: np.ndarray) -> np.ndarray:

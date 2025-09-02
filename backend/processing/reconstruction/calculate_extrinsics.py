@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import numpy as np
 from typing import Dict, List, Tuple
-from .camera import Camera
+from camera import Camera
 
 
 def _list_cameras(base_path: str) -> List[str]:

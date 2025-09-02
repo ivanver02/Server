@@ -1,7 +1,7 @@
 """Triangulación por DLT (SVD) punto a punto para cada frame."""
 import numpy as np
 from typing import Dict, Tuple
-from .camera import Camera
+from camera import Camera
 
 
 def triangulate_frame_svd(cameras: Dict[str, Camera], frame_keypoints: Dict[str, Tuple[np.ndarray, np.ndarray]], confidence_threshold: float = 0.0) -> np.ndarray:

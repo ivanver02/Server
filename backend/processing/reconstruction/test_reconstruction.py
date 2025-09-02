@@ -11,10 +11,10 @@ Pasos:
 """
 import os
 import numpy as np
-from .calculate_extrinsics import calculate_extrinsics
-from .triangulation_svd import triangulate_frame_svd
-from .triangulation_bundle_adjustment import refine_frame_bundle_adjustment
-from .reprojection import reprojection_error
+from calculate_extrinsics import calculate_extrinsics
+from triangulation_svd import triangulate_frame_svd
+from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
+from reprojection import reprojection_error
 
 PATIENT_ID = "1"
 SESSION_ID = "8"
