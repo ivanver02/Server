@@ -3,7 +3,13 @@ Sistema de reconstrucción 3D - Clase Camera y gestión de parámetros.
 """
 
 import numpy as np
+import sys
+from pathlib import Path
 from typing import Optional
+
+# Añadir el directorio raíz del proyecto al path
+sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+
 from config.camera_intrinsics import CAMERA_INTRINSICS
 
 

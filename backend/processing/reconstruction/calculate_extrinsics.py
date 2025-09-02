@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 from typing import Dict, Tuple
 import logging
-from .camera import Camera
+from camera import Camera
 
 logger = logging.getLogger(__name__)
 

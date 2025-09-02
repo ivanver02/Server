@@ -34,7 +34,7 @@ def load_keypoints_chunk(patient: str, session: str, chunk: str) -> dict:
         Dict {frame_id: {camera_id: keypoints_2d}}
     """
     
-    base_path = Path("../../data/processed/2D_keypoints")
+    base_path = Path(__file__).parent.parent.parent.parent / "data" / "processed" / "2D_keypoints"
     chunk_data = {}
     
     # Buscar archivos que contengan el chunk específico
@@ -104,7 +104,7 @@ def test_reconstruction_system():
     print(f"\n3. Procesando {len(chunk_data)} frames...")
     
     # Directorio de salida
-    output_dir = Path("../../data/processed/3D_keypoints") / patient_id / session_id
+    output_dir = Path(__file__).parent.parent.parent.parent / "data" / "processed" / "3D_keypoints" / patient_id / session_id
     output_dir.mkdir(parents=True, exist_ok=True)
     
     svd_results = []

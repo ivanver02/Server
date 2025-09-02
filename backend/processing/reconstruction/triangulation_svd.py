@@ -5,7 +5,7 @@ Triangulación 3D usando SVD (método rápido).
 import numpy as np
 from typing import Dict, Tuple
 import logging
-from .camera import Camera
+from camera import Camera
 
 logger = logging.getLogger(__name__)
 
