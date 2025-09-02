@@ -10,6 +10,7 @@ Pasos:
 4. Refinar con Bundle Adjustment y comparar
 """
 import os
+from pathlib import Path
 import numpy as np
 from calculate_extrinsics import calculate_extrinsics
 from triangulation_svd import triangulate_frame_svd
@@ -19,8 +20,11 @@ from reprojection import reprojection_error
 PATIENT_ID = "patient1"
 SESSION_ID = "session8"
 CHUNK_ID = 0
-BASE_2D_DIR = "data/processed/2D_keypoints"
-BASE_3D_DIR = "data/processed/3D_keypoints"
+
+# Raíz del proyecto (Server/) y rutas absolutas para evitar problemas al ejecutar desde distintos cwd
+_ROOT = Path(__file__).resolve().parents[3]
+BASE_2D_DIR = str(_ROOT / "data" / "processed" / "2D_keypoints")
+BASE_3D_DIR = str(_ROOT / "data" / "processed" / "3D_keypoints")
 
 
 def _list_cameras(session_path: str):
@@ -52,6 +56,8 @@ def _load_frame(camera_path: str, frame_id: int, chunk_id: int):
 
 def main():
     session_path = os.path.join(BASE_2D_DIR, PATIENT_ID, SESSION_ID)
+    # Debug de ruta
+    print(f"Buscando sesión en: {session_path}")
     if not os.path.isdir(session_path):
         print("No existe la ruta de sesión, abortando.")
         return
