@@ -1,7 +1,7 @@
-"""Prueba completa de reconstrucción 3D (chunk 0) para paciente 1 sesión 8.
+"""Prueba completa de reconstrucción 3D (chunk 0) para patient1 session8.
 
 No genera datos nuevos: asume que existen keypoints 2D procesados en:
-data/processed/2D_keypoints/1/8/cameraX/(coordinates|confidence)/{frame}_0.npy
+data/processed/2D_keypoints/patient1/session8/cameraX/(coordinates|confidence)/{frame}_0.npy
 
 Pasos:
 1. Calcular extrínsecos (camera0 referencia)
@@ -16,8 +16,8 @@ from triangulation_svd import triangulate_frame_svd
 from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
 from reprojection import reprojection_error
 
-PATIENT_ID = "1"
-SESSION_ID = "8"
+PATIENT_ID = "patient1"
+SESSION_ID = "session8"
 CHUNK_ID = 0
 BASE_2D_DIR = "data/processed/2D_keypoints"
 BASE_3D_DIR = "data/processed/3D_keypoints"

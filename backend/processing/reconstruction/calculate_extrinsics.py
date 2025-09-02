@@ -1,7 +1,7 @@
 """Cálculo preciso de extrínsecos relativos a camera0 usando sólo keypoints 2D.
 
 Algoritmo:
-1. Detectar cámaras disponibles (directorios data/processed/2D_keypoints/<paciente>/<sesion>/cameraX)
+1. Detectar cámaras disponibles (directorios data/processed/2D_keypoints/<patient>/<session>/cameraX)
 2. Cargar todos los frames del chunk indicado (por requisito: chunk 0 en test)
 3. Reunir correspondencias para cada cámara vs camera0: (x,y) por keypoint y frame con confianza válida
 4. Normalizar usando K^{-1} de cada cámara para obtener coordenadas en el plano imagen normalizado
