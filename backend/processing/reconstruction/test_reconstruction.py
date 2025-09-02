@@ -26,9 +26,9 @@ def load_keypoints_chunk(patient: str, session: str, chunk: str) -> dict:
     Carga todos los frames de un chunk específico para todas las cámaras.
     
     Args:
-        patient: ID del paciente
-        session: ID de la sesión  
-        chunk: ID del chunk
+        patient: ID del paciente (ej: "1")
+        session: ID de la sesión (ej: "8")
+        chunk: ID del chunk (ej: "2")
         
     Returns:
         Dict {frame_id: {camera_id: keypoints_2d}}
@@ -37,24 +37,29 @@ def load_keypoints_chunk(patient: str, session: str, chunk: str) -> dict:
     base_path = Path(__file__).parent.parent.parent.parent / "data" / "processed" / "2D_keypoints"
     chunk_data = {}
     
+    # Formato de directorio: patient1/session8/camera0
+    patient_dir = f"patient{patient}"
+    session_dir = f"session{session}"
+    
     # Buscar archivos que contengan el chunk específico
-    for camera_id in ["camera_0", "camera_1", "camera_2"]:
-        camera_path = base_path / patient / session / camera_id / "coordinates"
+    for camera_num in [0, 1, 2]:
+        camera_dir = f"camera{camera_num}"
+        camera_path = base_path / patient_dir / session_dir / camera_dir / "coordinates"
         
         if not camera_path.exists():
             logger.warning(f"No existe directorio: {camera_path}")
             continue
         
-        # Buscar archivos del chunk específico
+        # Buscar archivos del chunk específico (formato: {frame_id}_{chunk_id}.npy)
         pattern = f"*_{chunk}.npy"
         chunk_files = list(camera_path.glob(pattern))
         
-        logger.info(f"Cámara {camera_id}: {len(chunk_files)} frames encontrados para chunk {chunk}")
+        logger.info(f"Cámara {camera_dir}: {len(chunk_files)} frames encontrados para chunk {chunk}")
         
         for file_path in chunk_files:
-            # Extraer frame_id del nombre del archivo
-            filename = file_path.stem  # formato: frame_XXXX_chunk_XXX
-            frame_id = filename.split('_')[1]  # extraer XXXX
+            # Extraer frame_id del nombre del archivo (formato: 3_2.npy)
+            filename = file_path.stem  # ej: "3_2"
+            frame_id = filename.split('_')[0]  # extraer "3"
             
             try:
                 keypoints = np.load(file_path)
@@ -62,7 +67,7 @@ def load_keypoints_chunk(patient: str, session: str, chunk: str) -> dict:
                 if frame_id not in chunk_data:
                     chunk_data[frame_id] = {}
                 
-                chunk_data[frame_id][camera_id] = keypoints
+                chunk_data[frame_id][camera_dir] = keypoints
                 
             except Exception as e:
                 logger.error(f"Error cargando {file_path}: {e}")
@@ -81,7 +86,7 @@ def test_reconstruction_system():
     # Configuración
     patient_id = "1"
     session_id = "8" 
-    chunk_id = "chunk_000"
+    chunk_id = "0"
     
     # 1. Cargar datos del chunk 0
     print("1. Cargando keypoints 2D del chunk 0...")
@@ -96,7 +101,7 @@ def test_reconstruction_system():
     # 2. Inicializar cámaras
     print("\n2. Inicializando cámaras...")
     cameras = {}
-    for camera_id in ["camera_0", "camera_1", "camera_2"]:
+    for camera_id in ["camera0", "camera1", "camera2"]:
         cameras[camera_id] = Camera(camera_id)
         print(f"   ✓ {camera_id}: fx={cameras[camera_id].K[0,0]:.1f}, fy={cameras[camera_id].K[1,1]:.1f}")
     
@@ -104,8 +109,8 @@ def test_reconstruction_system():
     print(f"\n3. Procesando {len(chunk_data)} frames...")
     
     # Directorio de salida
-    
-    output_dir = Path(__file__).parent.parent.parent.parent / "data" / "processed" / "3D_keypoints" / patient_id / session_id
+
+    output_dir = Path(__file__).parent.parent.parent.parent / "data" / "processed" / "3D_keypoints" / f"patient{patient_id}" / f"session{session_id}"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     svd_results = []
@@ -140,14 +145,14 @@ def test_reconstruction_system():
         validation_ba = reproject_and_validate(cameras, points_3d_ba, frame_keypoints)
         
         # 8. Guardar resultados
-        frame_chunk_name = f"frame_{frame_id}_{chunk_id}"
+        # Formato: {frame_id}_{chunk_id}_method.npy (ej: 3_2_svd.npy)
         
         # Guardar SVD
-        svd_file = output_dir / f"{frame_chunk_name}_svd.npy"
+        svd_file = output_dir / f"{frame_id}_{chunk_id}_svd.npy"
         np.save(svd_file, points_3d_svd)
         
         # Guardar Bundle Adjustment
-        ba_file = output_dir / f"{frame_chunk_name}_ba.npy"
+        ba_file = output_dir / f"{frame_id}_{chunk_id}_ba.npy"
         np.save(ba_file, points_3d_ba)
         
         # Estadísticas
@@ -199,6 +204,8 @@ def test_reconstruction_system():
             print(f"\nMejora Bundle Adjustment: {improvement:.1f}%")
         
         print(f"\nArchivos guardados en: {output_dir}")
+        print(f"Estructura: patient{patient_id}/session{session_id}/")
+        print(f"Formato archivos: frame_{{frame_id}}_{{chunk_id}}_{{method}}.npy")
     
     print("\n=== FIN PRUEBA ===")
 
