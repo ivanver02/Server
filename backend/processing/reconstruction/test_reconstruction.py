@@ -179,12 +179,15 @@ def test_reconstruction_system():
         if len(first_point_2d) >= 2:
             # Triangular manualmente usando DLT
             A_manual = []
+            matrices_P = {}
             for cam_id, pt_2d in first_point_2d.items():
                 camera = cameras[cam_id]
                 P = camera.get_projection_matrix()
+                matrices_P[cam_id] = P
                 x, y = pt_2d
                 A_manual.append(x * P[2, :] - P[0, :])
                 A_manual.append(y * P[2, :] - P[1, :])
+                logger.info(f"Matriz P {cam_id}:\n{P}")
             
             A_manual = np.array(A_manual)
             _, _, V = np.linalg.svd(A_manual)
@@ -194,12 +197,30 @@ def test_reconstruction_system():
             logger.info(f"Punto 3D manual: {X_manual}")
             logger.info(f"Punto 3D SVD:    {points_3d_svd[0]}")
             
-            # Reproyectar manualmente
+            # Verificar que usamos las mismas matrices P para reproyección
             for cam_id, pt_2d_orig in first_point_2d.items():
                 camera = cameras[cam_id]
-                pt_reproj = camera.project_points(X_manual.reshape(1, 3))[0]
-                error = np.linalg.norm(pt_reproj - pt_2d_orig)
-                logger.info(f"{cam_id}: Original {pt_2d_orig} -> Reproj {pt_reproj} -> Error {error:.2f}px")
+                P_reproj = camera.get_projection_matrix()
+                
+                # Comparar matrices
+                P_triangulation = matrices_P[cam_id]
+                matriz_igual = np.allclose(P_triangulation, P_reproj)
+                logger.info(f"{cam_id} matrices iguales: {matriz_igual}")
+                
+                # Reproyectar usando la misma matriz P que se usó para triangular
+                X_homo = np.append(X_manual, 1.0)
+                pt_reproj_homo = P_triangulation @ X_homo
+                pt_reproj_manual = pt_reproj_homo[:2] / pt_reproj_homo[2]
+                
+                # También usar el método de la clase Camera
+                pt_reproj_camera = camera.project_points(X_manual.reshape(1, 3))[0]
+                
+                error_manual = np.linalg.norm(pt_reproj_manual - pt_2d_orig)
+                error_camera = np.linalg.norm(pt_reproj_camera - pt_2d_orig)
+                
+                logger.info(f"{cam_id}: Original {pt_2d_orig}")
+                logger.info(f"  -> Reproj manual: {pt_reproj_manual} -> Error {error_manual:.2f}px")
+                logger.info(f"  -> Reproj camera: {pt_reproj_camera} -> Error {error_camera:.2f}px")
         logger.info("=== FIN VERIFICACIÓN ===")
         
         
