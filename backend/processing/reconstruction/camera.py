@@ -9,6 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 from typing import Optional
+from pathlib import Path
+import sys
+
+# Asegura que la raíz del proyecto (Server/) esté en sys.path
+_ROOT = Path(__file__).resolve().parents[3]
+if str(_ROOT) not in sys.path:
+    sys.path.append(str(_ROOT))
 
 from config.camera_intrinsics import CAMERA_INTRINSICS
 
