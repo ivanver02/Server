@@ -10,11 +10,11 @@ import logging
 from pathlib import Path
 
 # Imports de los módulos de reconstrucción
-from camera import Camera
-from calculate_extrinsics import calculate_extrinsics_from_keypoints
-from triangulation_svd import triangulate_svd
-from triangulation_bundle_adjustment import triangulate_bundle_adjustment
-from reprojection import reproject_and_validate
+from backend.processing.reconstruction.camera import Camera
+from backend.processing.reconstruction.calculate_extrinsics import calculate_extrinsics_from_keypoints
+from backend.processing.reconstruction.triangulation_svd import triangulate_svd
+from backend.processing.reconstruction.triangulation_bundle_adjustment import triangulate_bundle_adjustment
+from backend.processing.reconstruction.reprojection import reproject_and_validate
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
