@@ -20,7 +20,7 @@ class Camera:
         Inicializa la cámara con parámetros intrínsecos del config.
         
         Args:
-            camera_id: ID de la cámara ("camera_0", "camera_1", "camera_2")
+            camera_id: ID de la cámara ("camera0", "camera1", "camera2")
         """
         if camera_id not in CAMERA_INTRINSICS:
             raise ValueError(f"Camera ID {camera_id} no encontrado en CAMERA_INTRINSICS")

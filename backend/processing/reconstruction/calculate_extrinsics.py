@@ -1,6 +1,6 @@
 """
 Cálculo preciso de parámetros extrínsecos usando keypoints 2D.
-Usa la cámara 0 como referencia y calcula R,t para las otras cámaras.
+Usa la camera0 como referencia y calcula R,t para las otras cámaras.
 """
 
 import numpy as np
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def calculate_extrinsics_from_keypoints(
     cameras: Dict[str, Camera],
     keypoints_2d: Dict[str, np.ndarray],
-    reference_camera: str = "camera_0"
+    reference_camera: str = "camera0"
 ) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
     """
     Calcula parámetros extrínsecos usando correspondencias de keypoints 2D.

@@ -8,7 +8,7 @@ import numpy as np
 # Ajustada para mayor precisión basada en especificaciones del sensor
 CAMERA_INTRINSICS = {
     # Cámara 0 - Referencia (S/N: CPE345P0007S)
-    "camera_0": {
+    "camera0": {
         "camera_matrix": np.array([
             [465.12, 0.0, 320.0],    # fx calculado para FOV 69°H
             [0.0, 465.12, 240.0],    # fy (mismo que fx, píxeles cuadrados)
@@ -21,7 +21,7 @@ CAMERA_INTRINSICS = {
     },
     
     # Cámara 1 (S/N: CPE745P0002V) - Ligeras variaciones por tolerancias de fabricación
-    "camera_1": {
+    "camera1": {
         "camera_matrix": np.array([
             [466.85, 0.0, 321.2],    # Pequeña variación en fx y cx
             [0.0, 465.93, 239.1],    # Pequeña variación en fy y cy
@@ -34,7 +34,7 @@ CAMERA_INTRINSICS = {
     },
     
     # Cámara 2 (S/N: CPE745P0002B) - Ligeras variaciones por tolerancias de fabricación
-    "camera_2": {
+    "camera2": {
         "camera_matrix": np.array([
             [463.78, 0.0, 318.9],    # Pequeña variación en fx y cx
             [0.0, 464.25, 241.5],    # Pequeña variación en fy y cy
