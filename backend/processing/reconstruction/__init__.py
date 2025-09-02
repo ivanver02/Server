@@ -1,3 +1,4 @@
+"""Módulo de reconstrucción 3D: inicializa utilidades de reconstrucción."""
 """
 Sistema de reconstrucción 3D para análisis de marcha.
 

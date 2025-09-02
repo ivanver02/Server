@@ -1,103 +1,36 @@
-"""
-Triangulación 3D usando SVD (método rápido).
-"""
-
+"""Triangulación por DLT (SVD) punto a punto para cada frame."""
 import numpy as np
 from typing import Dict, Tuple
-import logging
-from backend.processing.reconstruction.camera import Camera
-
-logger = logging.getLogger(__name__)
+from .camera import Camera
 
 
-def triangulate_svd(
-    cameras: Dict[str, Camera],
-    keypoints_2d: Dict[str, np.ndarray],
-    min_cameras: int = 2
-) -> np.ndarray:
+def triangulate_frame_svd(cameras: Dict[str, Camera], frame_keypoints: Dict[str, Tuple[np.ndarray, np.ndarray]], confidence_threshold: float = 0.0) -> np.ndarray:
+    """Triangula todos los keypoints de un frame.
+
+    frame_keypoints: dict camera_id -> (coords(K,2), conf(K,))
+    Devuelve (K,3) con np.nan donde no se pudo triangulizar.
     """
-    Triangulación 3D usando SVD.
-    
-    Args:
-        cameras: Dict con objetos Camera configurados
-        keypoints_2d: Dict con keypoints 2D por cámara
-        min_cameras: Número mínimo de cámaras para triangular
-        
-    Returns:
-        Array Nx3 con puntos 3D reconstruidos
-    """
-    
-    # Determinar número de keypoints
-    num_keypoints = max(len(kp) for kp in keypoints_2d.values()) if keypoints_2d else 0
-    
-    if num_keypoints == 0:
-        return np.array([]).reshape(0, 3)
-    
-    points_3d = []
-    
-    for point_idx in range(num_keypoints):
-        # Recopilar observaciones válidas
-        A_rows = []
-        
-        for camera_id, camera in cameras.items():
-            if camera_id not in keypoints_2d:
-                continue
-                
-            kp_2d = keypoints_2d[camera_id]
-            if point_idx >= len(kp_2d):
-                continue
-                
-            point_2d = kp_2d[point_idx]
-            if np.any(np.isnan(point_2d)):
-                continue
-            
-            # Matriz de proyección
-            P = camera.get_projection_matrix()
-            x, y = point_2d
-            
-            # Ecuaciones de DLT: x*P3 - P1 = 0, y*P3 - P2 = 0
-            A_rows.append(x * P[2, :] - P[0, :])
-            A_rows.append(y * P[2, :] - P[1, :])
-        
-        if len(A_rows) < min_cameras * 2:
-            points_3d.append([np.nan, np.nan, np.nan])
+    cam_items = sorted(cameras.items())
+    num_keypoints = next(iter(frame_keypoints.values()))[0].shape[0]
+    points_3d = np.full((num_keypoints, 3), np.nan, dtype=np.float64)
+    # Precompute projection matrices
+    proj = {cid: cam.P for cid, cam in cam_items}
+    for k in range(num_keypoints):
+        obs = []  # list of (P, x, y)
+        for cid, cam in cam_items:
+            coords, conf = frame_keypoints[cid]
+            if conf[k] > confidence_threshold and not np.isnan(coords[k]).any():
+                x, y = coords[k]
+                obs.append((proj[cid], x, y))
+        if len(obs) < 2:
             continue
-        
-        A = np.array(A_rows)
-        
-        try:
-            # Resolver usando SVD
-            _, _, Vt = np.linalg.svd(A)
-            X_hom = Vt[-1, :]
-            
-            # Convertir a coordenadas cartesianas
-            if abs(X_hom[3]) < 1e-10:
-                points_3d.append([np.nan, np.nan, np.nan])
-                continue
-                
-            X_cart = X_hom[:3] / X_hom[3]
-            
-            # Verificar rango razonable
-            if np.any(np.abs(X_cart) > 1000):
-                points_3d.append([np.nan, np.nan, np.nan])
-                continue
-                
-            points_3d.append(X_cart)
-            
-        except np.linalg.LinAlgError:
-            points_3d.append([np.nan, np.nan, np.nan])
-    
-    result = np.array(points_3d)
-    valid_count = np.sum(~np.isnan(result[:, 0]))
-    logger.info(f"Triangulación SVD: {valid_count}/{num_keypoints} puntos válidos")
-    
-    # Log estadísticas de los puntos 3D
-    if valid_count > 0:
-        valid_mask = ~np.isnan(result[:, 0])
-        valid_points = result[valid_mask]
-        logger.info(f"  Rango X: [{valid_points[:, 0].min():.2f}, {valid_points[:, 0].max():.2f}]")
-        logger.info(f"  Rango Y: [{valid_points[:, 1].min():.2f}, {valid_points[:, 1].max():.2f}]")
-        logger.info(f"  Rango Z: [{valid_points[:, 2].min():.2f}, {valid_points[:, 2].max():.2f}]")
-        logger.info(f"  Distancia media al origen: {np.linalg.norm(valid_points, axis=1).mean():.2f}")
-    
-    return result
+        A_rows = []
+        for P, x, y in obs:
+            A_rows.append(x * P[2] - P[0])
+            A_rows.append(y * P[2] - P[1])
+        A = np.stack(A_rows)
+        _, _, Vt = np.linalg.svd(A)
+        X = Vt[-1]
+        X /= X[3]
+        points_3d[k] = X[:3]
+    return points_3d
