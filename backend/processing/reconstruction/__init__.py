@@ -1,25 +1,18 @@
-"""Módulo de reconstrucción 3D: inicializa utilidades de reconstrucción."""
-"""
-Sistema de reconstrucción 3D para análisis de marcha.
+"""Utilidades de reconstrucción 3D.
 
-Módulos principales:
-- camera: Gestión de parámetros intrínsecos y extrínsecos
-- calculate_extrinsics: Cálculo de parámetros extrínsecos desde keypoints 2D
-- triangulation_svd: Reconstrucción 3D rápida usando SVD
-- triangulation_bundle_adjustment: Reconstrucción 3D precisa usando Bundle Adjustment
-- reprojection: Validación por reproyección 2D
+Exporta símbolos existentes en los módulos del paquete.
 """
 
 from .camera import Camera
-from .calculate_extrinsics import calculate_extrinsics_from_keypoints
-from .triangulation_svd import triangulate_svd
-from .triangulation_bundle_adjustment import triangulate_bundle_adjustment
-from .reprojection import reproject_and_validate
+from .calculate_extrinsics import calculate_extrinsics
+from .triangulation_svd import triangulate_frame_svd
+from .triangulation_bundle_adjustment import refine_frame_bundle_adjustment
+from .reprojection import reprojection_error
 
 __all__ = [
-    'Camera',
-    'calculate_extrinsics_from_keypoints',
-    'triangulate_svd', 
-    'triangulate_bundle_adjustment',
-    'reproject_and_validate'
+    "Camera",
+    "calculate_extrinsics",
+    "triangulate_frame_svd",
+    "refine_frame_bundle_adjustment",
+    "reprojection_error",
 ]
