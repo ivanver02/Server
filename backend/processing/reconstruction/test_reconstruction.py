@@ -148,6 +148,12 @@ def test_reconstruction_system():
         # Actualizar cámaras con extrínsecos
         for cam_id, (R, t) in extrinsics.items():
             cameras[cam_id].set_extrinsics(R, t)
+            # Log para verificar consistencia de matrices
+            P = cameras[cam_id].get_projection_matrix()
+            logger.info(f"Matriz proyección {cam_id}:")
+            logger.info(f"  P shape: {P.shape}")
+            logger.info(f"  P[:, 3] (columna traslación): {P[:, 3]}")
+            logger.info(f"  Det(P[:, :3]): {np.linalg.det(P[:, :3]):.6f}")
         
         # 5. Reconstrucción con SVD
         points_3d_svd = triangulate_svd(cameras, frame_keypoints)
@@ -158,6 +164,44 @@ def test_reconstruction_system():
         # 7. Validación por reproyección
         validation_svd = reproject_and_validate(cameras, points_3d_svd, frame_keypoints)
         validation_ba = reproject_and_validate(cameras, points_3d_ba, frame_keypoints)
+        
+        # VERIFICACIÓN MANUAL DE CONSISTENCIA
+        # Tomar el primer punto y verificar manualmente la triangulación/reproyección
+        logger.info("=== VERIFICACIÓN MANUAL ===")
+        first_point_2d = {}
+        for cam_id in ["camera0", "camera1", "camera2"]:
+            if cam_id in frame_keypoints:
+                pt = frame_keypoints[cam_id][0]
+                if not np.isnan(pt).any():
+                    first_point_2d[cam_id] = pt
+                    logger.info(f"{cam_id} primer punto 2D: {pt}")
+        
+        if len(first_point_2d) >= 2:
+            # Triangular manualmente usando DLT
+            A_manual = []
+            for cam_id, pt_2d in first_point_2d.items():
+                camera = cameras[cam_id]
+                P = camera.get_projection_matrix()
+                x, y = pt_2d
+                A_manual.append(x * P[2, :] - P[0, :])
+                A_manual.append(y * P[2, :] - P[1, :])
+            
+            A_manual = np.array(A_manual)
+            _, _, V = np.linalg.svd(A_manual)
+            X_manual = V[-1, :4]
+            X_manual = X_manual[:3] / X_manual[3]
+            
+            logger.info(f"Punto 3D manual: {X_manual}")
+            logger.info(f"Punto 3D SVD:    {points_3d_svd[0]}")
+            
+            # Reproyectar manualmente
+            for cam_id, pt_2d_orig in first_point_2d.items():
+                camera = cameras[cam_id]
+                pt_reproj = camera.project_points(X_manual.reshape(1, 3))[0]
+                error = np.linalg.norm(pt_reproj - pt_2d_orig)
+                logger.info(f"{cam_id}: Original {pt_2d_orig} -> Reproj {pt_reproj} -> Error {error:.2f}px")
+        logger.info("=== FIN VERIFICACIÓN ===")
+        
         
         # 8. Guardar resultados
         # Formato: {frame_id}_{chunk_id}_method.npy (ej: 3_2_svd.npy)
