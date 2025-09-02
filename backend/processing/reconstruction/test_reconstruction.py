@@ -23,7 +23,12 @@ CHUNK_ID = 0
 
 # Raíz del proyecto (Server/) y rutas absolutas para evitar problemas al ejecutar desde distintos cwd
 _ROOT = Path(__file__).resolve().parents[3]
-BASE_2D_DIR = str(_ROOT / "data" / "processed" / "2D_keypoints")
+# Fuente de keypoints 2D actualizada según petición: usar ruta absoluta
+# /ome/work/Server/data/processed/2D_keypoints (si existe). Si no existe, cae al path local.
+_ABS_2D_OVERRIDE = Path("/ome/work/Server/data/processed/2D_keypoints")
+if not _ABS_2D_OVERRIDE.is_dir():
+    raise SystemExit("Ruta obligatoria de keypoints 2D no encontrada: /ome/work/Server/data/processed/2D_keypoints")
+BASE_2D_DIR = str(_ABS_2D_OVERRIDE)
 BASE_3D_DIR = str(_ROOT / "data" / "processed" / "3D_keypoints")
 
 
