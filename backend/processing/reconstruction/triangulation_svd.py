@@ -55,11 +55,6 @@ def triangulate_svd(
             P = camera.get_projection_matrix()
             x, y = point_2d
             
-            # Log de la primera matriz de proyección para debug
-            if point_idx == 0 and len(A_rows) == 0:
-                logger.info(f"DEBUG - Primera matriz de proyección {camera_id}:")
-                logger.info(f"  P = K[R|t]:\n{P}")
-            
             # Ecuaciones de DLT: x*P3 - P1 = 0, y*P3 - P2 = 0
             A_rows.append(x * P[2, :] - P[0, :])
             A_rows.append(y * P[2, :] - P[1, :])

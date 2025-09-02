@@ -81,17 +81,23 @@ def calculate_extrinsics_from_keypoints(
             if inliers < 8:
                 raise ValueError(f"Pocos inliers: {inliers}")
             
+            # CORRECCIÓN DE ESCALA: cv2.recoverPose devuelve t normalizada
+            # Para cámaras Orbbec en setup típico, distancia entre cámaras ~0.5-2 metros
+            # Escalar t para que tenga magnitud realista
+            ESTIMATED_BASELINE = 1.0  # metros, distancia estimada entre cámaras
+            t_scaled = t * ESTIMATED_BASELINE
+            
             # R, t representan la transformación de camera0 a camera_id
             # Para triangulación, necesitamos la transformación del mundo a cada cámara
             # Como camera0 es la referencia (mundo), estos son los extrínsecos directos
-            extrinsics[camera_id] = (R.astype(np.float64), t.astype(np.float64))
+            extrinsics[camera_id] = (R.astype(np.float64), t_scaled.astype(np.float64))
             
             # Log detallado de la pose calculada
             logger.info(f"Extrínsecos calculados para {camera_id}: {inliers} inliers")
             logger.info(f"  R determinante: {np.linalg.det(R):.6f}")
-            logger.info(f"  t magnitud: {np.linalg.norm(t):.3f}")
-            logger.info(f"  R:\n{R}")
-            logger.info(f"  t: {t.flatten()}")
+            logger.info(f"  t magnitud original: {np.linalg.norm(t):.3f}")
+            logger.info(f"  t magnitud escalada: {np.linalg.norm(t_scaled):.3f}")
+            logger.info(f"  t escalada: {t_scaled.flatten()}")
             
         except Exception as e:
             logger.error(f"Error calculando extrínsecos para {camera_id}: {e}")
