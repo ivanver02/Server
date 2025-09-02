@@ -62,21 +62,21 @@ def calculate_extrinsics_from_keypoints(
         pts_other = other_keypoints[valid_mask]
         
         try:
-            # Calcular matriz esencial 
-            # Nota: cv2.findEssentialMat(pts1, pts2, K1, K2) donde pts1 son de cámara1 y pts2 de cámara2
+            # Calcular matriz esencial usando solo una matriz de cámara (asumiendo calibración similar)
+            # OpenCV espera: findEssentialMat(points1, points2, cameraMatrix, method, prob, threshold)
             E, mask = cv2.findEssentialMat(
                 pts_ref, pts_other,
-                ref_camera.K, camera.K,
+                cameraMatrix=ref_camera.K,
                 method=cv2.RANSAC,
                 prob=0.999,
-                threshold=2.0  # Aumentar threshold para keypoints de pose humana
+                threshold=2.0
             )
             
             if E is None:
                 raise ValueError("No se pudo calcular matriz esencial")
             
-            # Recuperar pose usando las matrices correctas
-            inliers, R, t, mask_pose = cv2.recoverPose(E, pts_ref, pts_other, ref_camera.K, camera.K)
+            # Recuperar pose
+            inliers, R, t, mask_pose = cv2.recoverPose(E, pts_ref, pts_other, ref_camera.K)
             
             if inliers < 8:
                 raise ValueError(f"Pocos inliers: {inliers}")
