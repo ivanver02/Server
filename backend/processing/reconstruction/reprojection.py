@@ -5,7 +5,7 @@ Reproyección de puntos 3D a 2D para validación.
 import numpy as np
 from typing import Dict, Tuple
 import logging
-from camera import Camera
+from backend.processing.reconstruction.camera import Camera
 
 logger = logging.getLogger(__name__)
 

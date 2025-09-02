@@ -104,6 +104,7 @@ def test_reconstruction_system():
     print(f"\n3. Procesando {len(chunk_data)} frames...")
     
     # Directorio de salida
+    
     output_dir = Path(__file__).parent.parent.parent.parent / "data" / "processed" / "3D_keypoints" / patient_id / session_id
     output_dir.mkdir(parents=True, exist_ok=True)
     

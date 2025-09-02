@@ -6,8 +6,8 @@ import numpy as np
 from scipy.optimize import least_squares
 from typing import Dict, Optional
 import logging
-from camera import Camera
-from triangulation_svd import triangulate_svd
+from backend.processing.reconstruction.camera import Camera
+from backend.processing.reconstruction.triangulation_svd import triangulate_svd
 
 logger = logging.getLogger(__name__)
 
