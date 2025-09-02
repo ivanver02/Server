@@ -62,24 +62,28 @@ def calculate_extrinsics_from_keypoints(
         pts_other = other_keypoints[valid_mask]
         
         try:
-            # Calcular matriz esencial
+            # Calcular matriz esencial 
+            # Nota: cv2.findEssentialMat(pts1, pts2, K1, K2) donde pts1 son de cámara1 y pts2 de cámara2
             E, mask = cv2.findEssentialMat(
                 pts_ref, pts_other,
-                ref_camera.K,
+                ref_camera.K, camera.K,
                 method=cv2.RANSAC,
                 prob=0.999,
-                threshold=1.0
+                threshold=2.0  # Aumentar threshold para keypoints de pose humana
             )
             
             if E is None:
                 raise ValueError("No se pudo calcular matriz esencial")
             
-            # Recuperar pose
-            inliers, R, t, mask_pose = cv2.recoverPose(E, pts_ref, pts_other, ref_camera.K)
+            # Recuperar pose usando las matrices correctas
+            inliers, R, t, mask_pose = cv2.recoverPose(E, pts_ref, pts_other, ref_camera.K, camera.K)
             
             if inliers < 8:
                 raise ValueError(f"Pocos inliers: {inliers}")
             
+            # R, t representan la transformación de camera0 a camera_id
+            # Para triangulación, necesitamos la transformación del mundo a cada cámara
+            # Como camera0 es la referencia (mundo), estos son los extrínsecos directos
             extrinsics[camera_id] = (R.astype(np.float64), t.astype(np.float64))
             logger.info(f"Extrínsecos calculados para {camera_id}: {inliers} inliers")
             
