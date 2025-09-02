@@ -189,7 +189,7 @@ def main():
     base_data_dir = Path(r"/home/work/Server/data")  # Ajustar ruta según tu configuración
     patient_id = "1"
     session_id = "8"
-    camera_id = 0
+    camera_id = 1
     chunk_number = 0
     
     logger.info(f"Iniciando procesamiento para paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
