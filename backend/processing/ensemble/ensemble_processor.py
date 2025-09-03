@@ -125,7 +125,7 @@ class EnsembleProcessor:
             
         session_data = self.active_sessions[patient_id][session_id]
         max_chunk = session_data['max_chunk']
-        
+        print(f"EL MAXIMO CHUNK REGISTRADO ES {max_chunk}")
         # Solo procesar si es el chunk final
         if max_chunk == -1 or chunk_id != max_chunk:
             logger.debug(f"Chunk {chunk_id} no es el final (max: {max_chunk}), no iniciando ensemble aún")
