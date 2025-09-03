@@ -61,22 +61,24 @@ def load_ensemble_keypoints(base_data_dir: Path, patient_id: str, session_id: st
     logger.info(f"Cargados keypoints de {len(keypoints)} frames para chunk {chunk_number}")
     return keypoints
 
-"""Definición de esqueleto (pares de índices). Ajustar según el orden real de keypoints.
-Por defecto se incluye una lista genérica para 23 puntos (extensión de COCO)."""
+"""Esqueleto COCO estándar (17 keypoints).
+Índices asumidos (COCO):
+0:nose 1:left_eye 2:right_eye 3:left_ear 4:right_ear 5:left_shoulder 6:right_shoulder
+7:left_elbow 8:right_elbow 9:left_wrist 10:right_wrist 11:left_hip 12:right_hip
+13:left_knee 14:right_knee 15:left_ankle 16:right_ankle
+"""
+# Lista de aristas COCO comúnmente usada
 SKELETON_EDGES = [
-    # Cabeza / torso superior (similar COCO base 0..10)
-    (0,1),(0,2),(1,3),(2,4),
-    (3,5),(4,6),           # hombro->codo
-    (5,7),(6,8),           # codo->muñeca
-    (5,9),(6,10),          # hombros a cadera izq/der (si indices 9,10 son caderas)
-    (9,10),                # cadera izq - cadera der
-    # Piernas (suponiendo indices consecutivos)
-    (9,11),(11,13),(13,15),  # pierna izquierda (cadera->rodilla->tobillo)
-    (10,12),(12,14),(14,16), # pierna derecha
-    # Pies manos extra (si existen más puntos: 17-22)
-    (15,17),(16,18),       # tobillo a punta pie
-    (7,19),(8,20),         # muñeca a mano extra
-    (19,21),(20,22),       # dedos/centro mano
+    (5,7), (7,9),        # Brazo izquierdo
+    (6,8), (8,10),       # Brazo derecho
+    (5,6),               # Hombros
+    (5,11), (6,12),      # Hombro a cadera
+    (11,12),             # Caderas
+    (11,13), (13,15),    # Pierna izquierda
+    (12,14), (14,16),    # Pierna derecha
+    (0,5), (0,6),        # Nariz a hombros
+    (0,1), (0,2),        # Nariz a ojos
+    (1,3), (2,4)         # Ojo a oreja
 ]
 
 def draw_keypoints_on_frame(frame, coordinates, confidence, confidence_threshold=0.1, draw_skeleton=True):
