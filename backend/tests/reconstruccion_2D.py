@@ -135,7 +135,7 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
     # Crear directorio de salida
     output_dir = base_data_dir / "processed" / "test_annotated" / f"patient{patient_id}" / f"session{session_id}" / f"camera{camera_id}"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"chunk_{chunk_number}_annotated.mp4"
+    output_path = output_dir / f"{chunk_number}.mp4"
     
     # Abrir video de entrada
     cap = cv2.VideoCapture(str(video_path))
