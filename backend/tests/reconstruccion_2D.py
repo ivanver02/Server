@@ -212,6 +212,7 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
 
 def process_videos(patient_id, session_id, num_cameras, draw_skeleton=True, confidence_threshold=0.1):
     """Función principal"""
+    # Prueba
     # Configuración - ajustar según tu estructura
     base_data_dir = Path(r"/home/work/Server/data")  # Ajustar ruta según tu configuración
     for i in range(num_cameras):
