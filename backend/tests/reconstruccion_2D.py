@@ -210,32 +210,83 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
     
     return True
 
-def process_videos(patient_id, session_id, num_cameras, draw_skeleton=True, confidence_threshold=0.1):
-    """Función principal"""
-    # Prueba
-    # Configuración - ajustar según tu estructura
-    base_data_dir = Path(r"/home/work/Server/data")  # Ajustar ruta según tu configuración
-    for i in range(num_cameras):
-        camera_id = i
-        chunk_number = 0
+def process_videos(patient_id: str, session_id: str, cameras_count: int, chunk_number: int = 0):
+    """
+    Genera videos anotados con keypoints 2D para un chunk específico.
+    """
+    logger.info(f"Iniciando generación de videos anotados para patient {patient_id}, session {session_id}, chunk {chunk_number}")
 
-        logger.info(f"Iniciando procesamiento para paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
+    # Directorio base de la sesión
+    session_base_dir = Path(f"/home/work/Server/data/processed/2D_keypoints/patient{patient_id}/session{session_id}")
+    unprocessed_dir = Path(f"/home/work/Server/data/unprocessed/patient{patient_id}/session{session_id}")
+    output_base_dir = Path(f"/home/work/Server/data/processed/test_annotated/patient{patient_id}/session{session_id}")
+    
+    # Definir los bordes del esqueleto COCO
+    coco_edges = [
+        (0, 1), (0, 2), (1, 3), (2, 4),  # Cabeza
+        (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),  # Torso
+        (5, 11), (6, 12), (11, 12),  # Hombros
+        (11, 13), (13, 15), (12, 14), (14, 16)  # Brazos
+    ]
 
-        if not base_data_dir.exists():
-            logger.error(f"No se encontró el directorio base: {base_data_dir}")
-            logger.error("Ajusta la variable 'base_data_dir' en el script según tu configuración")
-            return
+    for cam_id in range(cameras_count):
+        camera_dir = session_base_dir / f"camera{cam_id}"
+        video_file = unprocessed_dir / f"camera{cam_id}" / f"{chunk_number}.mp4"
+        output_dir = output_base_dir / f"camera{cam_id}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / f"{chunk_number}.mp4"
 
-        success = create_annotated_video(
-            base_data_dir, patient_id, session_id, camera_id, chunk_number,
-            draw_skeleton=draw_skeleton, confidence_threshold=confidence_threshold
-        )
+        if not video_file.exists():
+            logger.warning(f"Video original no encontrado para cámara {cam_id}, chunk {chunk_number}: {video_file}")
+            continue
 
-        if success:
-            logger.info(f"Procesamiento completado exitosamente para la cámara {camera_id}")
-        else:
-            logger.error(f"Error en el procesamiento para la cámara {camera_id}")
-    # Fin procesamiento
+        # Cargar keypoints y confianza
+        try:
+            coords_file = camera_dir / "coordinates" / f"frame_chunk_{chunk_number}.npy"
+            confs_file = camera_dir / "confidence" / f"frame_chunk_{chunk_number}.npy"
+            keypoints = np.load(coords_file)
+            confidences = np.load(confs_file)
+        except FileNotFoundError:
+            logger.warning(f"No se encontraron archivos de keypoints para cámara {cam_id}, chunk {chunk_number}")
+            continue
 
-if __name__ == "__main__":
-    process_videos("1", "8", 4, draw_skeleton=True, confidence_threshold=0.1)
+        cap = cv2.VideoCapture(str(video_file))
+        if not cap.isOpened():
+            logger.error(f"No se pudo abrir el video: {video_file}")
+            continue
+
+        # Configuración del video de salida
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        out = cv2.VideoWriter(str(output_file), fourcc, fps, (width, height))
+
+        frame_idx = 0
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_idx < len(keypoints):
+                points = keypoints[frame_idx]
+                confs = confidences[frame_idx]
+
+                # Dibujar esqueleto
+                for start_kp, end_kp in coco_edges:
+                    if confs[start_kp] > 0.3 and confs[end_kp] > 0.3:
+                        start_point = tuple(points[start_kp].astype(int))
+                        end_point = tuple(points[end_kp].astype(int))
+                        cv2.line(frame, start_point, end_point, (0, 255, 0), 2)
+
+                # Dibujar keypoints
+                for i, point in enumerate(points):
+                    if confs[i] > 0.3:
+                        cv2.circle(frame, tuple(point.astype(int)), 5, (0, 0, 255), -1)
+            
+            out.write(frame)
+            frame_idx += 1
+
+        cap.release()
+        out.release()
+        logger.info(f"Video anotado generado para cámara {cam_id}, chunk {chunk_number}: {output_file}")

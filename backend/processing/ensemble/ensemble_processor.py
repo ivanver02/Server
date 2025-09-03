@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import logging
 from backend.tests.reconstruccion_2D import process_videos
+import requests
 
 # Importar las clases de detectores
 from backend.processing.detectors.vitpose import VitPoseDetector
@@ -187,6 +188,38 @@ class EnsembleProcessor:
         except Exception as e:
             logger.error(f"Error en ensemble asíncrono: {e}")
 
+    def _upload_annotated_videos(self, patient_id: str, session_id: str, cameras_count: int, chunk_number: int):
+        """
+        Envía los videos anotados al proyecto Code.
+        """
+        logger.info(f"Iniciando subida de videos anotados para patient {patient_id}, session {session_id}, chunk {chunk_number}")
+        
+        base_url = "http://localhost:5000/api/annotated_videos/upload"
+        annotated_dir = self.base_data_dir / "processed" / "test_annotated" / f"patient{patient_id}" / f"session{session_id}"
+
+        for cam_id in range(cameras_count):
+            video_path = annotated_dir / f"camera{cam_id}" / f"{chunk_number}.mp4"
+            if not video_path.exists():
+                logger.warning(f"Video anotado no encontrado, saltando subida: {video_path}")
+                continue
+
+            try:
+                with open(video_path, 'rb') as f:
+                    files = {'file': (f"{chunk_number}.mp4", f, 'video/mp4')}
+                    data = {
+                        'patient_id': patient_id,
+                        'session_id': session_id,
+                        'camera_id': cam_id,
+                        'chunk_number': chunk_number
+                    }
+                    response = requests.post(base_url, files=files, data=data, timeout=30)
+                    if response.status_code == 200:
+                        logger.info(f"Video anotado de cámara {cam_id} subido exitosamente.")
+                    else:
+                        logger.error(f"Error subiendo video de cámara {cam_id}: {response.status_code} - {response.text}")
+            except Exception as e:
+                logger.error(f"Excepción al subir video de cámara {cam_id}: {e}")
+
     def process_session_ensemble(self, patient_id: str, session_id: str, max_chunk: int):
         """
         Procesar ensemble para toda la sesión cuando todas las cámaras han terminado
@@ -219,7 +252,15 @@ class EnsembleProcessor:
                 logger.info(f" Chunk {chunk_num} completado: {chunk_processed_count}/{len(camera_dirs)} cámaras procesadas")
             
             logger.info(f" Ensemble completado: {total_processed} chunks procesados para sesión {session_id} ({max_chunk + 1} chunks × {len(camera_dirs)} cámaras)")
-            process_videos(patient_id, session_id, len(camera_dirs))
+            
+            # Generar y subir videos anotados para el chunk 0 (o el que se decida)
+            target_chunk_for_annotation = 0
+            if max_chunk >= target_chunk_for_annotation:
+                logger.info(f"Generando videos anotados para el chunk {target_chunk_for_annotation}...")
+                process_videos(patient_id, session_id, len(camera_dirs), chunk_number=target_chunk_for_annotation)
+                
+                logger.info(f"Subiendo videos anotados del chunk {target_chunk_for_annotation} al servidor 'Code'...")
+                self._upload_annotated_videos(patient_id, session_id, len(camera_dirs), chunk_number=target_chunk_for_annotation)
 
         except Exception as e:
             logger.error(f"Error procesando ensemble de sesión: {e}")
