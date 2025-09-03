@@ -61,32 +61,60 @@ def load_ensemble_keypoints(base_data_dir: Path, patient_id: str, session_id: st
     logger.info(f"Cargados keypoints de {len(keypoints)} frames para chunk {chunk_number}")
     return keypoints
 
-def draw_keypoints_on_frame(frame, coordinates, confidence, confidence_threshold=0.1):
-    """
-    Dibujar keypoints en un frame
-    """
+"""Definición de esqueleto (pares de índices). Ajustar según el orden real de keypoints.
+Por defecto se incluye una lista genérica para 23 puntos (extensión de COCO)."""
+SKELETON_EDGES = [
+    # Cabeza / torso superior (similar COCO base 0..10)
+    (0,1),(0,2),(1,3),(2,4),
+    (3,5),(4,6),           # hombro->codo
+    (5,7),(6,8),           # codo->muñeca
+    (5,9),(6,10),          # hombros a cadera izq/der (si indices 9,10 son caderas)
+    (9,10),                # cadera izq - cadera der
+    # Piernas (suponiendo indices consecutivos)
+    (9,11),(11,13),(13,15),  # pierna izquierda (cadera->rodilla->tobillo)
+    (10,12),(12,14),(14,16), # pierna derecha
+    # Pies manos extra (si existen más puntos: 17-22)
+    (15,17),(16,18),       # tobillo a punta pie
+    (7,19),(8,20),         # muñeca a mano extra
+    (19,21),(20,22),       # dedos/centro mano
+]
+
+def draw_keypoints_on_frame(frame, coordinates, confidence, confidence_threshold=0.1, draw_skeleton=True):
     annotated_frame = frame.copy()
-    
+    h, w = frame.shape[:2]
+    n = len(coordinates)
+
+    # Dibujar esqueleto primero (para que los puntos queden encima)
+    if draw_skeleton:
+        for a, b in SKELETON_EDGES:
+            if a < n and b < n:
+                conf_a = confidence[a] if a < len(confidence) else 0
+                conf_b = confidence[b] if b < len(confidence) else 0
+                if conf_a > confidence_threshold and conf_b > confidence_threshold:
+                    xa, ya = int(coordinates[a,0]), int(coordinates[a,1])
+                    xb, yb = int(coordinates[b,0]), int(coordinates[b,1])
+                    if 0 <= xa < w and 0 <= ya < h and 0 <= xb < w and 0 <= yb < h:
+                        conf_line = (conf_a + conf_b) * 0.5
+                        c_int = min(255, int(conf_line * 255))
+                        color = (0, c_int, 255 - c_int)
+                        thickness = 2 if conf_line > 0.5 else 1
+                        cv2.line(annotated_frame, (xa, ya), (xb, yb), color, thickness, cv2.LINE_AA)
+
+    # Dibujar puntos
     for i, (coord, conf) in enumerate(zip(coordinates, confidence)):
-        if conf > confidence_threshold:  # Solo dibujar keypoints con confianza suficiente
+        if conf > confidence_threshold:
             x, y = int(coord[0]), int(coord[1])
-            
-            # Verificar que las coordenadas están dentro del frame
-            if 0 <= x < frame.shape[1] and 0 <= y < frame.shape[0]:
-                # Color basado en la confianza (rojo para alta confianza, azul para baja)
+            if 0 <= x < w and 0 <= y < h:
                 color_intensity = min(255, int(conf * 255))
-                color = (0, color_intensity, 255 - color_intensity)  # BGR
-                
-                # Dibujar círculo para el keypoint
-                cv2.circle(annotated_frame, (x, y), 3, color, -1)
-                
-                # Opcional: dibujar número del keypoint
-                cv2.putText(annotated_frame, str(i), (x + 5, y - 5), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
-    
+                color = (0, color_intensity, 255 - color_intensity)
+                radius = 4 if conf > 0.6 else 3
+                cv2.circle(annotated_frame, (x, y), radius, color, -1, cv2.LINE_AA)
+                cv2.putText(annotated_frame, str(i), (x + 5, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.35, color, 1, cv2.LINE_AA)
+
     return annotated_frame
 
-def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str, camera_id: int, chunk_number: int):
+def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str, camera_id: int, chunk_number: int,
+                           draw_skeleton: bool = True, confidence_threshold: float = 0.1):
     """
     Crear video anotado con keypoints del ensemble
     """
@@ -147,16 +175,13 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
         if frame_number in keypoints:
             frame_keypoints = keypoints[frame_number]
             annotated_frame = draw_keypoints_on_frame(
-                frame, 
-                frame_keypoints['coordinates'], 
-                frame_keypoints['confidence']
+                frame,
+                frame_keypoints['coordinates'],
+                frame_keypoints['confidence'],
+                confidence_threshold=confidence_threshold,
+                draw_skeleton=draw_skeleton,
             )
             frames_with_keypoints += 1
-            
-            # Agregar información de frame en la esquina
-            info_text = f"Frame: {frame_number} | Keypoints: {len(frame_keypoints['coordinates'])}"
-            cv2.putText(annotated_frame, info_text, (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
         else:
             # Si no hay keypoints, usar frame original con mensaje
@@ -183,47 +208,31 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
     
     return True
 
-def process_videos(patient_id, session_id, num_cameras):
+def process_videos(patient_id, session_id, num_cameras, draw_skeleton=True, confidence_threshold=0.1):
     """Función principal"""
     # Configuración - ajustar según tu estructura
     base_data_dir = Path(r"/home/work/Server/data")  # Ajustar ruta según tu configuración
     for i in range(num_cameras):
         camera_id = i
         chunk_number = 0
-        
+
         logger.info(f"Iniciando procesamiento para paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
-        
-        # Verificar que existe el directorio base
+
         if not base_data_dir.exists():
             logger.error(f"No se encontró el directorio base: {base_data_dir}")
             logger.error("Ajusta la variable 'base_data_dir' en el script según tu configuración")
             return
-        
-        # Crear video anotado
-        success = create_annotated_video(base_data_dir, patient_id, session_id, camera_id, chunk_number)
-        
+
+        success = create_annotated_video(
+            base_data_dir, patient_id, session_id, camera_id, chunk_number,
+            draw_skeleton=draw_skeleton, confidence_threshold=confidence_threshold
+        )
+
         if success:
             logger.info(f"Procesamiento completado exitosamente para la cámara {camera_id}")
         else:
             logger.error(f"Error en el procesamiento para la cámara {camera_id}")
-    camera_id = 1
-    chunk_number = 0
-    
-    logger.info(f"Iniciando procesamiento para paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
-    
-    # Verificar que existe el directorio base
-    if not base_data_dir.exists():
-        logger.error(f"No se encontró el directorio base: {base_data_dir}")
-        logger.error("Ajusta la variable 'base_data_dir' en el script según tu configuración")
-        return
-    
-    # Crear video anotado
-    success = create_annotated_video(base_data_dir, patient_id, session_id, camera_id, chunk_number)
-    
-    if success:
-        logger.info("Procesamiento completado exitosamente")
-    else:
-        logger.error("Error en el procesamiento")
+    # Fin procesamiento
 
 if __name__ == "__main__":
-    process_videos("1", "8", 4)
+    process_videos("1", "8", 4, draw_skeleton=True, confidence_threshold=0.1)
