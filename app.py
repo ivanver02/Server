@@ -373,6 +373,16 @@ def receive_chunk():
             chunk_number = int(chunk_number)
         except ValueError:
             return jsonify({'error': 'camera_id and chunk_number must be integers'}), 400
+
+        # Ignorar todos los chunks que no sean el primero (0)
+        if chunk_number != 0:
+            logger.info(f"Ignorando chunk {chunk_number} de cámara {camera_id} (solo se procesa chunk 0 en modo primer-chunk)")
+            return jsonify({
+                'status': 'chunk_ignored',
+                'reason': 'only_first_chunk_mode',
+                'camera_id': camera_id,
+                'chunk_number': chunk_number
+            }), 200
         
         # Verificar que la cámara esté en rango
         if camera_id >= current_session['cameras_count']:
