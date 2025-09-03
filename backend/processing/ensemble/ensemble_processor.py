@@ -132,6 +132,7 @@ class EnsembleProcessor:
             return False
             
         session_data['completed_cameras'].add(camera_id)
+        print(session_data['completed_cameras'])
         logger.info(f"Chunk final completado: patient_id={patient_id}, session_id={session_id}, camera_id={camera_id}, chunk_id={chunk_id}")
         logger.info(f"Cámaras completadas: {len(session_data['completed_cameras'])}/{session_data['cameras_count']}")
         
