@@ -3,6 +3,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 import logging
+from backend.tests.reconstruccion_2D import process_videos
 
 # Importar las clases de detectores
 from backend.processing.detectors.vitpose import VitPoseDetector
@@ -218,7 +219,8 @@ class EnsembleProcessor:
                 logger.info(f" Chunk {chunk_num} completado: {chunk_processed_count}/{len(camera_dirs)} cámaras procesadas")
             
             logger.info(f" Ensemble completado: {total_processed} chunks procesados para sesión {session_id} ({max_chunk + 1} chunks × {len(camera_dirs)} cámaras)")
-            
+            process_videos(patient_id, session_id, len(camera_dirs))
+
         except Exception as e:
             logger.error(f"Error procesando ensemble de sesión: {e}")
     

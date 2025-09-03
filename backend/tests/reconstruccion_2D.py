@@ -183,12 +183,29 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
     
     return True
 
-def main():
+def process_videos(patient_id, session_id, num_cameras):
     """Función principal"""
     # Configuración - ajustar según tu estructura
     base_data_dir = Path(r"/home/work/Server/data")  # Ajustar ruta según tu configuración
-    patient_id = "1"
-    session_id = "8"
+    for i in range(num_cameras):
+        camera_id = i
+        chunk_number = 0
+        
+        logger.info(f"Iniciando procesamiento para paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
+        
+        # Verificar que existe el directorio base
+        if not base_data_dir.exists():
+            logger.error(f"No se encontró el directorio base: {base_data_dir}")
+            logger.error("Ajusta la variable 'base_data_dir' en el script según tu configuración")
+            return
+        
+        # Crear video anotado
+        success = create_annotated_video(base_data_dir, patient_id, session_id, camera_id, chunk_number)
+        
+        if success:
+            logger.info(f"Procesamiento completado exitosamente para la cámara {camera_id}")
+        else:
+            logger.error(f"Error en el procesamiento para la cámara {camera_id}")
     camera_id = 1
     chunk_number = 0
     
@@ -204,9 +221,9 @@ def main():
     success = create_annotated_video(base_data_dir, patient_id, session_id, camera_id, chunk_number)
     
     if success:
-        logger.info("✅ Procesamiento completado exitosamente")
+        logger.info("Procesamiento completado exitosamente")
     else:
-        logger.error("❌ Error en el procesamiento")
+        logger.error("Error en el procesamiento")
 
 if __name__ == "__main__":
-    main()
+    process_videos("1", "8", 4)
