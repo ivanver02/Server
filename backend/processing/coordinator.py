@@ -21,8 +21,8 @@ class PoseProcessingCoordinator:
         self.detectors = [
             VitPoseDetector(),
             # MSPNDetector(),
-            HRNetDetector(),
-            CSPDetector()
+            # HRNetDetector(),
+            # CSPDetector()
         ]
         self.initialized = False
         
