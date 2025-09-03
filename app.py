@@ -49,6 +49,10 @@ current_session = {
 # Variable para controlar si ya verificamos el chunk 2
 chunk_2_verified = False
 
+finished = False
+camera_id_finished = 0
+chunk_number_finished = 0
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Endpoint de salud del servidor"""
@@ -228,6 +232,13 @@ def end_session():
             logger.info(f"Esperando que todas las cámaras completen el chunk final {max_chunk} para iniciar ensemble")
         else:
             logger.warning("No se encontraron chunks para procesar en ensemble")
+
+        if not finished:
+            chunk_completed = ensemble_processor.register_chunk_completion(
+                patient_id, session_id, f"camera{camera_id_finished}", chunk_number_finished
+            )
+            if chunk_completed:
+                logger.info(f"¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
         
         old_session = current_session.copy()
         current_session.update({
@@ -433,11 +444,16 @@ def receive_chunk():
             logger.info(f"Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
             
             # Registrar finalización del chunk en ensemble processor. Cuando se haya procesado el último chunk de todas las cámaras, se iniciará automáticamente el ensemble.
+            global camera_id_finished, chunk_number_finished
+            camera_id_finished = camera_id
+            chunk_number_finished = chunk_number
             chunk_completed = ensemble_processor.register_chunk_completion(
                 patient_id, session_id, f"camera{camera_id}", chunk_number
             )
             if chunk_completed:
                 logger.info(f"¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
+
+            finished = chunk_completed
 
         response_data = {
             'status': 'chunk_received',
