@@ -129,6 +129,18 @@ class EnsembleConfig:
     # Número mínimo de detectores requeridos para generar ensemble
     min_detectors_required: int = 1
 
+@dataclass
+class CodeClientConfig:
+    """Configuración para comunicarse con el proyecto 'Code' que recibe videos anotados"""
+    # IP de la máquina donde corre el proyecto Code dentro de la subred
+    host_ip: str = "172.16.185.232"
+    port: int = 5000
+    upload_endpoint: str = "/api/annotated_videos/upload"
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self.host_ip}:{self.port}"
+
 # Instancias globales de configuración
 server_config = ServerConfig()
 gpu_config = GPUConfig()
@@ -136,6 +148,7 @@ processing_config = ProcessingConfig()
 ensemble_config = EnsembleConfig()
 data_config = DataConfig()
 mmpose_config = MMPoseConfig()
+code_client_config = CodeClientConfig()
 
 # Inicializar directorios al importar
 data_config.ensure_directories()

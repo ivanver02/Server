@@ -12,7 +12,7 @@ from backend.processing.detectors.csp import CSPDetector
 from backend.processing.detectors.hrnet import HRNetDetector
 
 # Importar configuración de ensemble
-from config.settings import ensemble_config
+from config.settings import ensemble_config, code_client_config
 
 logger = logging.getLogger(__name__)
 
@@ -193,8 +193,8 @@ class EnsembleProcessor:
         Envía los videos anotados al proyecto Code.
         """
         logger.info(f"Iniciando subida de videos anotados para patient {patient_id}, session {session_id}, chunk {chunk_number}")
-        
-        base_url = "http://localhost:5000/api/annotated_videos/upload"
+        base_url = f"{code_client_config.base_url}{code_client_config.upload_endpoint}"
+        logger.info(f"Subiendo videos anotados a {base_url}")
         annotated_dir = self.base_data_dir / "processed" / "test_annotated" / f"patient{patient_id}" / f"session{session_id}"
 
         for cam_id in range(cameras_count):
