@@ -85,7 +85,8 @@ class EnsembleProcessor:
         self.active_sessions[patient_id][session_id] = {
             'max_chunk': -1,
             'cameras_count': cameras_count,
-            'completed_cameras': set()
+            # Mapa chunk_id -> set(camera_ids procesadas)
+            'chunks_progress': {}
         }
         
         logger.info(f"Sesión registrada: patient_id={patient_id}, session_id={session_id}, cameras_count={cameras_count}")
@@ -118,35 +119,57 @@ class EnsembleProcessor:
         return max_chunk
 
     def register_chunk_completion(self, patient_id: str, session_id: str, camera_id: str, chunk_id: int):
-        """Registra que una cámara completó el procesamiento de un chunk"""
+        """Registra que una cámara completó el procesamiento de un chunk.
+
+        Nueva lógica:
+          - Siempre registrar camera_id en un diccionario por chunk (set para evitar duplicados)
+          - Si aún no se conoce max_chunk (== -1) -> devolver False sin más lógica
+          - Si se conoce y el chunk recibido es el max_chunk, comprobar si todas las cámaras están presentes en su set
+            * Si sí: lanzar ensemble y devolver True
+            * Si no: devolver False
+        """
         if patient_id not in self.active_sessions or session_id not in self.active_sessions[patient_id]:
             logger.warning(f"Sesión no encontrada para chunk completion: patient_id={patient_id}, session_id={session_id}")
             return False
-            
+
         session_data = self.active_sessions[patient_id][session_id]
+        chunks_progress = session_data['chunks_progress']
+        cameras_count = session_data['cameras_count']
         max_chunk = session_data['max_chunk']
-        print(f"EL MAXIMO CHUNK REGISTRADO ES {max_chunk}")
-        # Solo procesar si es el chunk final
-        if max_chunk == -1 or chunk_id != max_chunk:
-            logger.debug(f"Chunk {chunk_id} no es el final (max: {max_chunk}), no iniciando ensemble aún")
+
+        # Registrar cámara en el set del chunk
+        if chunk_id not in chunks_progress:
+            chunks_progress[chunk_id] = set()
+        before_count = len(chunks_progress[chunk_id])
+        chunks_progress[chunk_id].add(camera_id)
+        after_count = len(chunks_progress[chunk_id])
+        if after_count > before_count:
+            logger.info(f"Registrado chunk {chunk_id}: cámara {camera_id} (progreso {after_count}/{cameras_count})")
+        else:
+            logger.debug(f"Chunk {chunk_id}: cámara {camera_id} ya estaba registrada")
+
+        # Si aún no sabemos cuál es el chunk final, no podemos decidir iniciar ensemble
+        if max_chunk == -1:
+            logger.debug(f"Max chunk aún desconocido (chunk recibido {chunk_id}), no se evalúa ensemble")
             return False
-            
-        session_data['completed_cameras'].add(camera_id)
-        print(session_data['completed_cameras'])
-        logger.info(f"Chunk final completado: patient_id={patient_id}, session_id={session_id}, camera_id={camera_id}, chunk_id={chunk_id}")
-        logger.info(f"Cámaras completadas: {len(session_data['completed_cameras'])}/{session_data['cameras_count']}")
-        
-        # Verificar si todas las cámaras completaron el chunk final
-        if len(session_data['completed_cameras']) >= session_data['cameras_count']:
-            logger.info(f"¡Todas las cámaras completaron el chunk final! Iniciando ensemble para TODA la sesión {session_id}")
-            # Ejecutar ensemble en thread separado
+
+        # Si el chunk no es el final, simplemente devolvemos False
+        if chunk_id != max_chunk:
+            logger.debug(f"Chunk {chunk_id} registrado, esperando chunk final {max_chunk}")
+            return False
+
+        # Evaluar si todas las cámaras ya completaron el chunk final
+        completed_set = chunks_progress.get(max_chunk, set())
+        logger.info(f"Chunk final {max_chunk}: {len(completed_set)}/{cameras_count} cámaras registradas")
+        if len(completed_set) >= cameras_count:
+            logger.info(f"¡Todas las cámaras completaron el chunk final {max_chunk}! Iniciando ensemble de sesión")
             threading.Thread(
                 target=self._process_session_ensemble_async,
                 args=(patient_id, session_id, max_chunk),
                 daemon=True
             ).start()
             return True
-            
+
         return False
 
     def _process_session_ensemble_async(self, patient_id: str, session_id: str, max_chunk: int):
