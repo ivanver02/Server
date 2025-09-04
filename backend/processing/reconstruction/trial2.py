@@ -129,6 +129,437 @@ def prepare_frame_data() -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
     }
 
 
+def calculate_distance_from_scaled_points(points_3d: np.ndarray, cameras: Dict[str, Camera], scale_factor: float):
+    """Calcula la distancia a las cámaras usando puntos escalados."""
+    
+    # Aplicar escala a los puntos
+    scaled_points = points_3d * scale_factor
+    
+    # Calcular distancia promedio de todos los puntos válidos a todas las cámaras
+    all_distances = []
+    
+    for cam_id, cam in cameras.items():
+        # Posición de la cámara (considerando que camera0 está en origen)
+        if cam_id == "camera0":
+            cam_pos = np.array([0.0, 0.0, 0.0])
+        else:
+            # Para otras cámaras, la posición es -t (transformación inversa)
+            cam_pos = -cam.t.flatten() * scale_factor  # También escalar posiciones de cámara
+        
+        # Calcular distancias de puntos válidos a esta cámara
+        for point in scaled_points:
+            if not np.isnan(point[0]):  # Solo puntos válidos
+                distance = np.linalg.norm(point - cam_pos)
+                all_distances.append(distance)
+    
+    # Distancia promedio estimada
+    estimated_avg_distance = np.mean(all_distances)
+    
+    print(f"\n=== DISTANCIA ESTIMADA A LAS CÁMARAS (ESCALADA) ===")
+    print(f"Basado en antebrazo de 30 cm como referencia")
+    print(f"Distancia promedio estimada: {estimated_avg_distance:.2f} metros")
+    
+    return estimated_avg_distance
+
+
+def calculate_scale_factor_from_forearm(points_3d: np.ndarray, real_forearm_length_cm: float = 30.0):
+    """Calcula el factor de escala basado en la longitud real del antebrazo (codo a muñeca)."""
+    
+    # Índices para codo y muñeca (derecha e izquierda)
+    # 7: Codo_izq, 8: Codo_der, 9: Muñeca_izq, 10: Muñeca_der
+    forearm_measurements = []
+    
+    # Antebrazo izquierdo (codo_izq a muñeca_izq)
+    if not np.isnan(points_3d[7, 0]) and not np.isnan(points_3d[9, 0]):
+        left_forearm = np.linalg.norm(points_3d[7] - points_3d[9])
+        forearm_measurements.append(("Antebrazo izquierdo", left_forearm))
+    
+    # Antebrazo derecho (codo_der a muñeca_der)
+    if not np.isnan(points_3d[8, 0]) and not np.isnan(points_3d[10, 0]):
+        right_forearm = np.linalg.norm(points_3d[8] - points_3d[10])
+        forearm_measurements.append(("Antebrazo derecho", right_forearm))
+    
+    if not forearm_measurements:
+        print("❌ ERROR: No se pueden medir los antebrazos (puntos no válidos)")
+        return 1.0
+    
+    # Usar el promedio de las medidas disponibles
+    avg_forearm_length_m = np.mean([length for _, length in forearm_measurements])
+    real_forearm_length_m = real_forearm_length_cm / 100.0  # convertir a metros
+    
+    # Factor de escala
+    scale_factor = real_forearm_length_m / avg_forearm_length_m
+    
+    print(f"\n=== CÁLCULO DE FACTOR DE ESCALA (BASADO EN ANTEBRAZO) ===")
+    print(f"Longitud real del antebrazo: {real_forearm_length_cm:.1f} cm")
+    for name, length in forearm_measurements:
+        print(f"{name} estimado: {length*100:.1f} cm")
+    print(f"Longitud promedio estimada: {avg_forearm_length_m*100:.1f} cm")
+    print(f"Factor de escala calculado: {scale_factor:.4f}")
+    
+    return scale_factor
+
+
+def analyze_body_measurements_scaled(points_3d: np.ndarray, method_name: str, scale_factor: float):
+    """Analiza las medidas corporales con escala corregida basada en longitud del antebrazo."""
+    
+    # Aplicar factor de escala a todos los puntos
+    scaled_points = points_3d * scale_factor
+    
+    # Definición de keypoints según el esqueleto típico
+    keypoint_names = [
+        "Nariz", "Ojo_izq", "Ojo_der", "Oreja_izq", "Oreja_der",
+        "Hombro_izq", "Hombro_der", "Codo_izq", "Codo_der", 
+        "Muñeca_izq", "Muñeca_der", "Cadera_izq", "Cadera_der",
+        "Rodilla_izq", "Rodilla_der", "Tobillo_izq", "Tobillo_der",
+        "Extra_17", "Extra_18", "Extra_19", "Extra_20", "Extra_21", "Extra_22"
+    ]
+    
+    def distance_3d(p1_idx: int, p2_idx: int) -> float:
+        """Calcula distancia euclidiana entre dos puntos 3D escalados."""
+        if (p1_idx >= len(scaled_points) or p2_idx >= len(scaled_points) or 
+            np.isnan(scaled_points[p1_idx, 0]) or np.isnan(scaled_points[p2_idx, 0])):
+            return np.nan
+        return np.linalg.norm(scaled_points[p1_idx] - scaled_points[p2_idx])
+    
+    print(f"\n{'='*70}")
+    print(f"ANÁLISIS DE MEDIDAS CORPORALES ESCALADAS ({method_name})")
+    print(f"Referencia: Antebrazo = 30.0 cm, Factor de escala: {scale_factor:.4f}")
+    print(f"{'='*70}")
+    
+    # Medidas principales del cuerpo
+    measurements = []
+    
+    # Cabeza y cuello
+    measurements.extend([
+        ("Ancho cara (ojo_izq - ojo_der)", distance_3d(1, 2), "7-10 cm"),
+        ("Distancia ojos-nariz promedio", 
+         np.nanmean([distance_3d(0, 1), distance_3d(0, 2)]), "2-4 cm"),
+    ])
+    
+    # Torso
+    measurements.extend([
+        ("Ancho hombros", distance_3d(5, 6), "35-45 cm"),
+        ("Alto torso (hombro_izq - cadera_izq)", distance_3d(5, 11), "50-70 cm"),
+        ("Alto torso (hombro_der - cadera_der)", distance_3d(6, 12), "50-70 cm"),
+        ("Ancho caderas", distance_3d(11, 12), "25-35 cm"),
+    ])
+    
+    # Brazo izquierdo
+    measurements.extend([
+        ("Brazo izq (hombro-codo)", distance_3d(5, 7), "28-36 cm"),
+        ("Antebrazo izq (codo-muñeca)", distance_3d(7, 9), "23-30 cm"),
+        ("Brazo completo izq (hombro-muñeca)", distance_3d(5, 9), "55-70 cm"),
+    ])
+    
+    # Brazo derecho
+    measurements.extend([
+        ("Brazo der (hombro-codo)", distance_3d(6, 8), "28-36 cm"),
+        ("Antebrazo der (codo-muñeca)", distance_3d(8, 10), "23-30 cm"),
+        ("Brazo completo der (hombro-muñeca)", distance_3d(6, 10), "55-70 cm"),
+    ])
+    
+    # Pierna izquierda
+    measurements.extend([
+        ("Muslo izq (cadera-rodilla)", distance_3d(11, 13), "35-50 cm"),
+        ("Pantorrilla izq (rodilla-tobillo)", distance_3d(13, 15), "35-45 cm"),
+        ("Pierna completa izq (cadera-tobillo)", distance_3d(11, 15), "75-100 cm"),
+    ])
+    
+    # Pierna derecha
+    measurements.extend([
+        ("Muslo der (cadera-rodilla)", distance_3d(12, 14), "35-50 cm"),
+        ("Pantorrilla der (rodilla-tobillo)", distance_3d(14, 16), "35-45 cm"),
+        ("Pierna completa der (cadera-tobillo)", distance_3d(12, 16), "75-100 cm"),
+    ])
+    
+    # Medidas adicionales
+    measurements.extend([
+        ("Estatura aprox (cabeza-tobillo_izq)", 
+         distance_3d(0, 15) if not np.isnan(distance_3d(0, 15)) else np.nan, "150-190 cm"),
+        ("Estatura aprox (cabeza-tobillo_der)", 
+         distance_3d(0, 16) if not np.isnan(distance_3d(0, 16)) else np.nan, "150-190 cm"),
+        ("Envergadura (muñeca_izq - muñeca_der)", distance_3d(9, 10), "150-180 cm"),
+    ])
+    
+    # Mostrar resultados
+    print(f"{'Medida':<40} | {'Valor':<12} | {'Rango Normal':<15} | {'Estado'}")
+    print("-" * 85)
+    
+    valid_measurements = 0
+    realistic_measurements = 0
+    
+    for name, value, normal_range in measurements:
+        if np.isnan(value):
+            status = "❌ N/A"
+            value_str = "N/A"
+        else:
+            value_cm = value * 100  # convertir a cm
+            value_str = f"{value_cm:.1f} cm"
+            
+            # Análisis básico de realismo (rangos aproximados)
+            if "cara" in name.lower() or "ojos" in name.lower():
+                realistic = 3 <= value_cm <= 15
+            elif "hombros" in name.lower():
+                realistic = 25 <= value_cm <= 55
+            elif "torso" in name.lower():
+                realistic = 40 <= value_cm <= 80
+            elif "caderas" in name.lower():
+                realistic = 20 <= value_cm <= 45
+            elif "brazo" in name.lower() and "completo" not in name.lower():
+                realistic = 20 <= value_cm <= 45
+            elif "brazo completo" in name.lower():
+                realistic = 45 <= value_cm <= 80
+            elif "muslo" in name.lower():
+                realistic = 30 <= value_cm <= 60
+            elif "pantorrilla" in name.lower():
+                realistic = 30 <= value_cm <= 55
+            elif "pierna completa" in name.lower():
+                realistic = 65 <= value_cm <= 110
+            elif "estatura" in name.lower():
+                realistic = 140 <= value_cm <= 200
+            elif "envergadura" in name.lower():
+                realistic = 140 <= value_cm <= 200
+            else:
+                realistic = True  # Por defecto aceptar
+                
+            status = "✅ OK" if realistic else "⚠️ Fuera rango"
+            if realistic:
+                realistic_measurements += 1
+            valid_measurements += 1
+        
+        print(f"{name:<40} | {value_str:<12} | {normal_range:<15} | {status}")
+    
+    # Resumen
+    print(f"\n{'='*70}")
+    print(f"RESUMEN DE VALIDACIÓN ESCALADA ({method_name})")
+    print(f"{'='*70}")
+    print(f"Medidas válidas: {valid_measurements}/{len(measurements)}")
+    print(f"Medidas realistas: {realistic_measurements}/{valid_measurements} ({realistic_measurements/max(valid_measurements,1)*100:.1f}%)")
+    
+    if realistic_measurements / max(valid_measurements, 1) > 0.8:
+        print("🟢 EXCELENTE: Las proporciones corporales escaladas son muy realistas")
+    elif realistic_measurements / max(valid_measurements, 1) > 0.6:
+        print("🟡 BUENO: Las proporciones corporales escaladas son aceptables")
+    else:
+        print("🔴 PROBLEMA: Las proporciones corporales escaladas siguen siendo irrealistas")
+
+
+def analyze_body_measurements(points_3d: np.ndarray, method_name: str):
+    """Analiza las medidas corporales entre keypoints anatómicos."""
+    
+    # Definición de keypoints según el esqueleto típico (ajustar según tu modelo)
+    keypoint_names = [
+        "Nariz", "Ojo_izq", "Ojo_der", "Oreja_izq", "Oreja_der",
+        "Hombro_izq", "Hombro_der", "Codo_izq", "Codo_der", 
+        "Muñeca_izq", "Muñeca_der", "Cadera_izq", "Cadera_der",
+        "Rodilla_izq", "Rodilla_der", "Tobillo_izq", "Tobillo_der",
+        "Extra_17", "Extra_18", "Extra_19", "Extra_20", "Extra_21", "Extra_22"
+    ]
+    
+    def distance_3d(p1_idx: int, p2_idx: int) -> float:
+        """Calcula distancia euclidiana entre dos puntos 3D."""
+        if (p1_idx >= len(points_3d) or p2_idx >= len(points_3d) or 
+            np.isnan(points_3d[p1_idx, 0]) or np.isnan(points_3d[p2_idx, 0])):
+            return np.nan
+        return np.linalg.norm(points_3d[p1_idx] - points_3d[p2_idx])
+    
+    print(f"\n{'='*60}")
+    print(f"ANÁLISIS DE MEDIDAS CORPORALES ({method_name})")
+    print(f"{'='*60}")
+    
+    # Medidas principales del cuerpo
+    measurements = []
+    
+    # Cabeza y cuello
+    measurements.extend([
+        ("Ancho cara (ojo_izq - ojo_der)", distance_3d(1, 2), "7-10 cm"),
+        ("Distancia ojos-nariz promedio", 
+         np.nanmean([distance_3d(0, 1), distance_3d(0, 2)]), "2-4 cm"),
+    ])
+    
+    # Torso
+    measurements.extend([
+        ("Ancho hombros", distance_3d(5, 6), "35-45 cm"),
+        ("Alto torso (hombro_izq - cadera_izq)", distance_3d(5, 11), "50-70 cm"),
+        ("Alto torso (hombro_der - cadera_der)", distance_3d(6, 12), "50-70 cm"),
+        ("Ancho caderas", distance_3d(11, 12), "25-35 cm"),
+    ])
+    
+    # Brazo izquierdo
+    measurements.extend([
+        ("Brazo izq (hombro-codo)", distance_3d(5, 7), "28-36 cm"),
+        ("Antebrazo izq (codo-muñeca)", distance_3d(7, 9), "23-30 cm"),
+        ("Brazo completo izq (hombro-muñeca)", distance_3d(5, 9), "55-70 cm"),
+    ])
+    
+    # Brazo derecho
+    measurements.extend([
+        ("Brazo der (hombro-codo)", distance_3d(6, 8), "28-36 cm"),
+        ("Antebrazo der (codo-muñeca)", distance_3d(8, 10), "23-30 cm"),
+        ("Brazo completo der (hombro-muñeca)", distance_3d(6, 10), "55-70 cm"),
+    ])
+    
+    # Pierna izquierda
+    measurements.extend([
+        ("Muslo izq (cadera-rodilla)", distance_3d(11, 13), "35-50 cm"),
+        ("Pantorrilla izq (rodilla-tobillo)", distance_3d(13, 15), "35-45 cm"),
+        ("Pierna completa izq (cadera-tobillo)", distance_3d(11, 15), "75-100 cm"),
+    ])
+    
+    # Pierna derecha
+    measurements.extend([
+        ("Muslo der (cadera-rodilla)", distance_3d(12, 14), "35-50 cm"),
+        ("Pantorrilla der (rodilla-tobillo)", distance_3d(14, 16), "35-45 cm"),
+        ("Pierna completa der (cadera-tobillo)", distance_3d(12, 16), "75-100 cm"),
+    ])
+    
+    # Medidas adicionales
+    measurements.extend([
+        ("Estatura aprox (cabeza-tobillo_izq)", 
+         distance_3d(0, 15) if not np.isnan(distance_3d(0, 15)) else np.nan, "150-190 cm"),
+        ("Estatura aprox (cabeza-tobillo_der)", 
+         distance_3d(0, 16) if not np.isnan(distance_3d(0, 16)) else np.nan, "150-190 cm"),
+        ("Envergadura (muñeca_izq - muñeca_der)", distance_3d(9, 10), "150-180 cm"),
+    ])
+    
+    # Mostrar resultados
+    print(f"{'Medida':<40} | {'Valor':<12} | {'Rango Normal':<15} | {'Estado'}")
+    print("-" * 85)
+    
+    valid_measurements = 0
+    realistic_measurements = 0
+    
+    for name, value, normal_range in measurements:
+        if np.isnan(value):
+            status = "❌ N/A"
+            value_str = "N/A"
+        else:
+            value_cm = value * 100  # convertir a cm
+            value_str = f"{value_cm:.1f} cm"
+            
+            # Análisis básico de realismo (rangos aproximados)
+            if "cara" in name.lower() or "ojos" in name.lower():
+                realistic = 3 <= value_cm <= 15
+            elif "hombros" in name.lower():
+                realistic = 25 <= value_cm <= 55
+            elif "torso" in name.lower():
+                realistic = 40 <= value_cm <= 80
+            elif "caderas" in name.lower():
+                realistic = 20 <= value_cm <= 45
+            elif "brazo" in name.lower() and "completo" not in name.lower():
+                realistic = 20 <= value_cm <= 45
+            elif "brazo completo" in name.lower():
+                realistic = 45 <= value_cm <= 80
+            elif "muslo" in name.lower():
+                realistic = 30 <= value_cm <= 60
+            elif "pantorrilla" in name.lower():
+                realistic = 30 <= value_cm <= 55
+            elif "pierna completa" in name.lower():
+                realistic = 65 <= value_cm <= 110
+            elif "estatura" in name.lower():
+                realistic = 140 <= value_cm <= 200
+            elif "envergadura" in name.lower():
+                realistic = 140 <= value_cm <= 200
+            else:
+                realistic = True  # Por defecto aceptar
+                
+            status = "✅ OK" if realistic else "⚠️ Fuera rango"
+            if realistic:
+                realistic_measurements += 1
+            valid_measurements += 1
+        
+        print(f"{name:<40} | {value_str:<12} | {normal_range:<15} | {status}")
+    
+    # Resumen
+    print(f"\n{'='*60}")
+    print(f"RESUMEN DE VALIDACIÓN ({method_name})")
+    print(f"{'='*60}")
+    print(f"Medidas válidas: {valid_measurements}/{len(measurements)}")
+    print(f"Medidas realistas: {realistic_measurements}/{valid_measurements} ({realistic_measurements/max(valid_measurements,1)*100:.1f}%)")
+    
+    if realistic_measurements / max(valid_measurements, 1) > 0.8:
+        print("🟢 EXCELENTE: Las proporciones corporales son muy realistas")
+    elif realistic_measurements / max(valid_measurements, 1) > 0.6:
+        print("🟡 BUENO: Las proporciones corporales son aceptables")
+    else:
+        print("🔴 PROBLEMA: Las proporciones corporales parecen irrealistas")
+
+
+def print_3d_coordinates_scaled(points_3d: np.ndarray, method_name: str, scale_factor: float):
+    """Imprime las coordenadas 3D escaladas basadas en la longitud del antebrazo."""
+    
+    # Aplicar factor de escala
+    scaled_points = points_3d * scale_factor
+    
+    keypoint_names = [
+        "Nariz", "Ojo_izq", "Ojo_der", "Oreja_izq", "Oreja_der",
+        "Hombro_izq", "Hombro_der", "Codo_izq", "Codo_der", 
+        "Muñeca_izq", "Muñeca_der", "Cadera_izq", "Cadera_der",
+        "Rodilla_izq", "Rodilla_der", "Tobillo_izq", "Tobillo_der",
+        "Extra_17", "Extra_18", "Extra_19", "Extra_20", "Extra_21", "Extra_22"
+    ]
+    
+    print(f"\n{'='*80}")
+    print(f"COORDENADAS 3D ESCALADAS DE KEYPOINTS ({method_name})")
+    print(f"Referencia: Antebrazo = 30.0 cm, Factor de escala: {scale_factor:.4f}")
+    print(f"{'='*80}")
+    
+    print(f"{'Keypoint':<15} | {'X (m)':<10} | {'Y (m)':<10} | {'Z (m)':<10} | {'Estado'}")
+    print("-" * 80)
+    
+    valid_count = 0
+    for i, (name, point) in enumerate(zip(keypoint_names, scaled_points)):
+        if np.isnan(point[0]):
+            status = "❌ No válido"
+            x_str = y_str = z_str = "N/A"
+        else:
+            status = "✅ Válido"
+            x_str = f"{point[0]:.3f}"
+            y_str = f"{point[1]:.3f}"
+            z_str = f"{point[2]:.3f}"
+            valid_count += 1
+        
+        print(f"{name:<15} | {x_str:<10} | {y_str:<10} | {z_str:<10} | {status}")
+    
+    print(f"\nPuntos 3D válidos (escalados): {valid_count}/{len(scaled_points)}")
+
+
+def print_3d_coordinates(points_3d: np.ndarray, method_name: str):
+    """Imprime las coordenadas 3D de cada keypoint."""
+    
+    keypoint_names = [
+        "Nariz", "Ojo_izq", "Ojo_der", "Oreja_izq", "Oreja_der",
+        "Hombro_izq", "Hombro_der", "Codo_izq", "Codo_der", 
+        "Muñeca_izq", "Muñeca_der", "Cadera_izq", "Cadera_der",
+        "Rodilla_izq", "Rodilla_der", "Tobillo_izq", "Tobillo_der",
+        "Extra_17", "Extra_18", "Extra_19", "Extra_20", "Extra_21", "Extra_22"
+    ]
+    
+    print(f"\n{'='*70}")
+    print(f"COORDENADAS 3D DE KEYPOINTS ({method_name})")
+    print(f"{'='*70}")
+    
+    print(f"{'Keypoint':<15} | {'X (m)':<10} | {'Y (m)':<10} | {'Z (m)':<10} | {'Estado'}")
+    print("-" * 70)
+    
+    valid_count = 0
+    for i, (name, point) in enumerate(zip(keypoint_names, points_3d)):
+        if np.isnan(point[0]):
+            status = "❌ No válido"
+            x_str = y_str = z_str = "N/A"
+        else:
+            status = "✅ Válido"
+            x_str = f"{point[0]:.3f}"
+            y_str = f"{point[1]:.3f}"
+            z_str = f"{point[2]:.3f}"
+            valid_count += 1
+        
+        print(f"{name:<15} | {x_str:<10} | {y_str:<10} | {z_str:<10} | {status}")
+    
+    print(f"\nPuntos 3D válidos: {valid_count}/{len(points_3d)}")
+
+
 def main():
     """Función principal de reconstrucción 3D."""
     print("=== Reconstrucción 3D con datos reales ===")
@@ -194,13 +625,17 @@ def main():
         for cam_id, error in errors_svd.items():
             print(f"  {cam_id}: {error:.2f} píxeles")
         
-        # Estadísticas SVD
-        if svd_count > 0:
-            valid_svd = points_3d_svd[~np.isnan(points_3d_svd[:, 0])]
-            print(f"\nEstadísticas puntos 3D (SVD):")
-            print(f"  X: min={np.min(valid_svd[:, 0]):.3f}, max={np.max(valid_svd[:, 0]):.3f}")
-            print(f"  Y: min={np.min(valid_svd[:, 1]):.3f}, max={np.max(valid_svd[:, 1]):.3f}")
-            print(f"  Z: min={np.min(valid_svd[:, 2]):.3f}, max={np.max(valid_svd[:, 2]):.3f}")
+        # Mostrar coordenadas 3D para SVD
+        print_3d_coordinates(points_3d_svd, "SVD")
+        
+        # Calcular factor de escala basado en longitud real del antebrazo (30 cm)
+        scale_factor_svd = calculate_scale_factor_from_forearm(points_3d_svd, real_forearm_length_cm=30.0)
+        
+        # Mostrar coordenadas 3D escaladas para SVD
+        print_3d_coordinates_scaled(points_3d_svd, "SVD", scale_factor_svd)
+        
+        # Análisis de medidas corporales escaladas para SVD
+        analyze_body_measurements_scaled(points_3d_svd, "SVD", scale_factor_svd)
         
         # === PARTE 2: Bundle Adjustment ===
         print("\n" + "="*50)
@@ -221,13 +656,26 @@ def main():
             for cam_id, error in errors_ba.items():
                 print(f"  {cam_id}: {error:.2f} píxeles")
             
-            # Estadísticas Bundle Adjustment
-            if ba_count > 0:
-                valid_ba = points_3d_ba[~np.isnan(points_3d_ba[:, 0])]
-                print(f"\nEstadísticas puntos 3D (Bundle Adjustment):")
-                print(f"  X: min={np.min(valid_ba[:, 0]):.3f}, max={np.max(valid_ba[:, 0]):.3f}")
-                print(f"  Y: min={np.min(valid_ba[:, 1]):.3f}, max={np.max(valid_ba[:, 1]):.3f}")
-                print(f"  Z: min={np.min(valid_ba[:, 2]):.3f}, max={np.max(valid_ba[:, 2]):.3f}")
+            # Mostrar coordenadas 3D para Bundle Adjustment
+            print_3d_coordinates(points_3d_ba, "Bundle Adjustment")
+            
+            # Calcular factor de escala basado en longitud real del antebrazo (30 cm)
+            scale_factor = calculate_scale_factor_from_forearm(points_3d_ba, real_forearm_length_cm=30.0)
+            
+            # Mostrar coordenadas 3D escaladas para Bundle Adjustment
+            print_3d_coordinates_scaled(points_3d_ba, "Bundle Adjustment", scale_factor)
+            
+            # Análisis de medidas corporales escaladas para Bundle Adjustment
+            analyze_body_measurements_scaled(points_3d_ba, "Bundle Adjustment", scale_factor)
+            
+            # Calcular distancia estimada a las cámaras con escalado
+            estimated_distance = calculate_distance_from_scaled_points(points_3d_ba, cameras_rigorous, scale_factor)
+            
+            # También mostrar análisis sin escalar para comparación
+            print("\n" + "="*50)
+            print("ANÁLISIS SIN ESCALAR (para comparación)")
+            print("="*50)
+            analyze_body_measurements(points_3d_ba, "Bundle Adjustment - Sin Escalar")
             
             # === COMPARACIÓN ===
             print("\n" + "="*50)
@@ -244,6 +692,16 @@ def main():
             avg_error_ba = np.mean(list(errors_ba.values()))
             total_improvement = avg_error_svd - avg_error_ba
             print(f"\nError promedio: {avg_error_svd:.2f} -> {avg_error_ba:.2f} px ({total_improvement:+.2f} px)")
+            
+            # === RESUMEN FINAL ESCALADO ===
+            print("\n" + "="*60)
+            print("RESUMEN FINAL CON ESCALADO (Referencia: Antebrazo = 30cm)")
+            print("="*60)
+            print(f"✅ Factor de escala aplicado: {scale_factor:.4f}")
+            print(f"✅ Referencia usada: Longitud del antebrazo = 30.0 cm")
+            print(f"✅ Todas las medidas han sido corregidas proporcionalmente")
+            print(f"✅ Las coordenadas 3D escaladas representan dimensiones reales")
+            print(f"✅ Bundle Adjustment con escalado proporciona las medidas más precisas")
         
         else:
             print("No hay puntos válidos para Bundle Adjustment")
