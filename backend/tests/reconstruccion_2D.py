@@ -185,11 +185,12 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
 
 def main():
     """Función principal"""
-    # Configuración - ajustar según tu estructura
-    base_data_dir = Path(r"/home/work/Server/data")  # Ajustar ruta según tu configuración
-    patient_id = "1"
-    session_id = "8"
-    camera_id = 1
+    # Directorio base de datos relativo a la raíz del repo (Server/data)
+    # Este archivo está en Server/backend/tests -> subir 2 niveles para llegar a Server/
+    base_data_dir = Path(__file__).resolve().parents[2] / "data"
+    patient_id = "2"
+    session_id = "1"
+    camera_id = 2
     chunk_number = 0
     
     logger.info(f"Iniciando procesamiento para paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
