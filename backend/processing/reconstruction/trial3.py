@@ -12,11 +12,13 @@ if str(_ROOT) not in sys.path:
 from camera import Camera
 from triangulation_svd import triangulate_frame_svd
 from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
+from full_bundle_adjustment import full_bundle_adjustment, print_camera_changes
 from reprojection import reprojection_error
 from pose_estimation import triangulate_with_pose_estimation
 from pose_estimation_rigorous import estimate_extrinsics_rigorous
 from config.camera_intrinsics import CAMERA_INTRINSICS
 from typing import Tuple, Dict
+import traceback
 
 coordinates_camera_0 = np.array([[243.50415277, 159.37580359],
        [248.05017458, 155.09014137],
@@ -637,9 +639,9 @@ def main():
         # Análisis de medidas corporales escaladas para SVD
         analyze_body_measurements_scaled(points_3d_svd, "SVD", scale_factor_svd)
         
-        # === PARTE 2: Bundle Adjustment ===
+        # === PARTE 2: Bundle Adjustment Simple ===
         print("\n" + "="*50)
-        print("PARTE 2: BUNDLE ADJUSTMENT (Refinamiento)")
+        print("PARTE 2: BUNDLE ADJUSTMENT SIMPLE (Solo puntos 3D)")
         print("="*50)
         
         if svd_count > 0:
@@ -648,63 +650,123 @@ def main():
             )
             
             ba_count = np.sum(~np.isnan(points_3d_ba[:, 0]))
-            print(f"Bundle Adjustment: {svd_count} -> {ba_count} puntos válidos")
+            print(f"Bundle Adjustment Simple: {svd_count} -> {ba_count} puntos válidos")
             
-            # Errores de reproyección con Bundle Adjustment
+            # Errores de reproyección con Bundle Adjustment Simple
             errors_ba = reprojection_error(points_3d_ba, cameras_rigorous, frame_keypoints)
-            print(f"\nErrores de reproyección (Bundle Adjustment):")
+            print(f"\nErrores de reproyección (Bundle Adjustment Simple):")
             for cam_id, error in errors_ba.items():
                 print(f"  {cam_id}: {error:.2f} píxeles")
             
-            # Mostrar coordenadas 3D para Bundle Adjustment
-            print_3d_coordinates(points_3d_ba, "Bundle Adjustment")
+            # Mostrar coordenadas 3D para Bundle Adjustment Simple
+            print_3d_coordinates(points_3d_ba, "Bundle Adjustment Simple")
             
             # Calcular factor de escala basado en longitud real del antebrazo (30 cm)
             scale_factor = calculate_scale_factor_from_forearm(points_3d_ba, real_forearm_length_cm=30.0)
             
-            # Mostrar coordenadas 3D escaladas para Bundle Adjustment
-            print_3d_coordinates_scaled(points_3d_ba, "Bundle Adjustment", scale_factor)
+            # Mostrar coordenadas 3D escaladas para Bundle Adjustment Simple
+            print_3d_coordinates_scaled(points_3d_ba, "Bundle Adjustment Simple", scale_factor)
             
-            # Análisis de medidas corporales escaladas para Bundle Adjustment
-            analyze_body_measurements_scaled(points_3d_ba, "Bundle Adjustment", scale_factor)
+            # Análisis de medidas corporales escaladas para Bundle Adjustment Simple
+            analyze_body_measurements_scaled(points_3d_ba, "Bundle Adjustment Simple", scale_factor)
+            
+        else:
+            print("❌ ERROR: No hay puntos válidos de SVD para Bundle Adjustment Simple")
+            points_3d_ba = points_3d_svd
+            errors_ba = errors_svd
+        
+        # === PARTE 3: Bundle Adjustment Completo ===
+        print("\n" + "="*50)
+        print("PARTE 3: BUNDLE ADJUSTMENT COMPLETO (Puntos 3D + Extrínsecos)")
+        print("="*50)
+        
+        if svd_count > 0:
+            points_3d_full_ba, cameras_optimized = full_bundle_adjustment(
+                points_3d_svd, cameras_rigorous, frame_keypoints
+            )
+            
+            full_ba_count = np.sum(~np.isnan(points_3d_full_ba[:, 0]))
+            print(f"Bundle Adjustment Completo: {svd_count} -> {full_ba_count} puntos válidos")
+            
+            # Mostrar cambios en parámetros de cámaras
+            print_camera_changes(cameras_rigorous, cameras_optimized)
+            
+            # Errores de reproyección con Bundle Adjustment Completo
+            errors_full_ba = reprojection_error(points_3d_full_ba, cameras_optimized, frame_keypoints)
+            print(f"\nErrores de reproyección (Bundle Adjustment Completo):")
+            for cam_id, error in errors_full_ba.items():
+                print(f"  {cam_id}: {error:.2f} píxeles")
+            
+            # Mostrar coordenadas 3D para Bundle Adjustment Completo
+            print_3d_coordinates(points_3d_full_ba, "Bundle Adjustment Completo")
+            
+            # Calcular factor de escala basado en longitud real del antebrazo (30 cm)
+            scale_factor_full = calculate_scale_factor_from_forearm(points_3d_full_ba, real_forearm_length_cm=30.0)
+            
+            # Mostrar coordenadas 3D escaladas para Bundle Adjustment Completo
+            print_3d_coordinates_scaled(points_3d_full_ba, "Bundle Adjustment Completo", scale_factor_full)
+            
+            # Análisis de medidas corporales escaladas para Bundle Adjustment Completo
+            analyze_body_measurements_scaled(points_3d_full_ba, "Bundle Adjustment Completo", scale_factor_full)
             
             # Calcular distancia estimada a las cámaras con escalado
-            estimated_distance = calculate_distance_from_scaled_points(points_3d_ba, cameras_rigorous, scale_factor)
+            estimated_distance = calculate_distance_from_scaled_points(points_3d_full_ba, cameras_optimized, scale_factor_full)
             
             # También mostrar análisis sin escalar para comparación
             print("\n" + "="*50)
             print("ANÁLISIS SIN ESCALAR (para comparación)")
             print("="*50)
-            analyze_body_measurements(points_3d_ba, "Bundle Adjustment - Sin Escalar")
+            analyze_body_measurements(points_3d_full_ba, "Bundle Adjustment Completo - Sin Escalar")
             
-            # === COMPARACIÓN ===
-            print("\n" + "="*50)
-            print("COMPARACIÓN SVD vs BUNDLE ADJUSTMENT")
-            print("="*50)
-            
-            print("Mejora en errores de reproyección:")
-            for cam_id in errors_svd.keys():
-                if cam_id in errors_ba:
-                    improvement = errors_svd[cam_id] - errors_ba[cam_id]
-                    print(f"  {cam_id}: {errors_svd[cam_id]:.2f} -> {errors_ba[cam_id]:.2f} px ({improvement:+.2f} px)")
-            
-            avg_error_svd = np.mean(list(errors_svd.values()))
-            avg_error_ba = np.mean(list(errors_ba.values()))
-            total_improvement = avg_error_svd - avg_error_ba
-            print(f"\nError promedio: {avg_error_svd:.2f} -> {avg_error_ba:.2f} px ({total_improvement:+.2f} px)")
-            
-            # === RESUMEN FINAL ESCALADO ===
-            print("\n" + "="*60)
-            print("RESUMEN FINAL CON ESCALADO (Referencia: Antebrazo = 30cm)")
-            print("="*60)
-            print(f"✅ Factor de escala aplicado: {scale_factor:.4f}")
-            print(f"✅ Referencia usada: Longitud del antebrazo = 30.0 cm")
-            print(f"✅ Todas las medidas han sido corregidas proporcionalmente")
-            print(f"✅ Las coordenadas 3D escaladas representan dimensiones reales")
-            print(f"✅ Bundle Adjustment con escalado proporciona las medidas más precisas")
-        
         else:
-            print("No hay puntos válidos para Bundle Adjustment")
+            print("❌ ERROR: No hay puntos válidos de SVD para Bundle Adjustment Completo")
+            points_3d_full_ba = points_3d_svd
+            cameras_optimized = cameras_rigorous
+            errors_full_ba = errors_svd
+        
+        # === COMPARACIÓN COMPLETA ===
+        print("\n" + "="*60)
+        print("COMPARACIÓN COMPLETA DE MÉTODOS")
+        print("="*60)
+        
+        print("\n--- Errores de reproyección ---")
+        methods_errors = [
+            ("SVD", errors_svd),
+            ("Bundle Adj. Simple", errors_ba),
+            ("Bundle Adj. Completo", errors_full_ba)
+        ]
+        
+        print(f"{'Método':<20} | {'Camera0':<10} | {'Camera1':<10} | {'Camera2':<10} | {'Promedio':<10}")
+        print("-" * 75)
+        
+        for method_name, errors in methods_errors:
+            avg_error = np.mean(list(errors.values()))
+            print(f"{method_name:<20} | {errors['camera0']:<10.2f} | {errors['camera1']:<10.2f} | {errors['camera2']:<10.2f} | {avg_error:<10.2f}")
+        
+        print("\n--- Mejoras en errores ---")
+        for cam_id in errors_svd.keys():
+            improvement_simple = errors_svd[cam_id] - errors_ba[cam_id]
+            improvement_full = errors_svd[cam_id] - errors_full_ba[cam_id]
+            print(f"{cam_id}: Simple {improvement_simple:+.2f} px, Completo {improvement_full:+.2f} px")
+        
+        avg_error_svd = np.mean(list(errors_svd.values()))
+        avg_error_ba = np.mean(list(errors_ba.values()))
+        avg_error_full_ba = np.mean(list(errors_full_ba.values()))
+        
+        improvement_simple = avg_error_svd - avg_error_ba
+        improvement_full = avg_error_svd - avg_error_full_ba
+        
+        print(f"\nPromedio: Simple {improvement_simple:+.2f} px, Completo {improvement_full:+.2f} px")
+        
+        # === RESUMEN FINAL ===
+        print("\n" + "="*60)
+        print("RESUMEN FINAL ESCALADO")
+        print("="*60)
+        
+        print("Bundle Adjustment Completo ha optimizado tanto los puntos 3D como")
+        print("los parámetros extrínsecos de las cámaras para minimizar el error total.")
+        print(f"Factor de escala final: {scale_factor_full:.4f}")
+        print(f"Distancia estimada final: {estimated_distance:.2f} metros")
         
     except Exception as e:
         print(f"Error en método riguroso: {e}")

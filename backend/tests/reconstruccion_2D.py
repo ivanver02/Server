@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Script para generar video anotado con keypoints del ensemble
-Procesa el chunk 0 del paciente 1, sesión 6, cámara 0
-"""
-
 import cv2
 import numpy as np
 from pathlib import Path
@@ -183,17 +177,31 @@ def create_annotated_video(base_data_dir: Path, patient_id: str, session_id: str
     
     return True
 
+def create_several_videos(base_data_dir: Path, patient_id, session_id, num_cameras, max_chunk):
+
+    """
+    Crear varios videos anotados para diferentes chunks
+    """
+    for camera_id in range(num_cameras):
+        for chunk_number in range(max_chunk):
+            logger.info(f"Procesando paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
+            success = create_annotated_video(base_data_dir, patient_id, session_id, camera_id, chunk_number)
+            if not success:
+                logger.error(f"Error procesando cámara {camera_id}, chunk {chunk_number}")
+                return False
+            else:
+                logger.info(f"Video anotado creado para cámara {camera_id}, chunk {chunk_number}")
+    return True
+
 def main():
     """Función principal"""
     # Directorio base de datos relativo a la raíz del repo (Server/data)
     # Este archivo está en Server/backend/tests -> subir 2 niveles para llegar a Server/
     base_data_dir = Path(__file__).resolve().parents[2] / "data"
-    patient_id = "2"
-    session_id = "1"
-    camera_id = 2
-    chunk_number = 0
-    
-    logger.info(f"Iniciando procesamiento para paciente {patient_id}, sesión {session_id}, cámara {camera_id}, chunk {chunk_number}")
+    patient_id = "57"
+    session_id = "57"
+    num_cameras = 3
+    max_chunk = 7
     
     # Verificar que existe el directorio base
     if not base_data_dir.exists():
@@ -202,12 +210,12 @@ def main():
         return
     
     # Crear video anotado
-    success = create_annotated_video(base_data_dir, patient_id, session_id, camera_id, chunk_number)
+    success = create_several_videos(base_data_dir, patient_id, session_id, num_cameras, max_chunk)
     
     if success:
-        logger.info("✅ Procesamiento completado exitosamente")
+        logger.info("Procesamiento completado exitosamente")
     else:
-        logger.error("❌ Error en el procesamiento")
+        logger.error("Error en el procesamiento")
 
 if __name__ == "__main__":
     main()
