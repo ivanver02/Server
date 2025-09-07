@@ -9,22 +9,13 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.append(str(_ROOT))
 
-try:
-    from .camera import Camera
-    from .triangulation_svd import triangulate_frame_svd
-    from .triangulation_bundle_adjustment import refine_frame_bundle_adjustment
-    from .reprojection import reprojection_error
-    from .pose_estimation_rigorous import estimate_extrinsics_rigorous
-    from .config.camera_intrinsics import CAMERA_INTRINSICS
-    from .full_bundle_adjustment import full_bundle_adjustment, print_camera_changes
-except ImportError:
-    from camera import Camera
-    from triangulation_svd import triangulate_frame_svd
-    from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
-    from reprojection import reprojection_error
-    from pose_estimation_rigorous import estimate_extrinsics_rigorous
-    from config.camera_intrinsics import CAMERA_INTRINSICS
-    from full_bundle_adjustment import full_bundle_adjustment, print_camera_changes
+from camera import Camera
+from triangulation_svd import triangulate_frame_svd
+from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
+from reprojection import reprojection_error
+from pose_estimation_rigorous import estimate_extrinsics_rigorous
+from config.camera_intrinsics import CAMERA_INTRINSICS
+from full_bundle_adjustment import full_bundle_adjustment, print_camera_changes
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -32,9 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 class GaitAnalysis3D:
-    """Análisis completo de reconstrucción 3D - RÉPLICA EXACTA de trial2.py y analyze_distances_2D.py"""
+    """Análisis completo de reconstrucción 3D"""
     
-    # Constantes - iguales que trial2.py
+    # Constantes
     CONFIDENCE_THRESHOLD = 0.5
     KNOWN_BASELINE_CM = 72.0  # 72 cm entre cámaras 0 y 2
     FOREARM_REFERENCE_CM = 30.0  # 30 cm como referencia
@@ -44,7 +35,6 @@ class GaitAnalysis3D:
         self.session_id = session_id
         self.chunk_id = chunk_id
         self.frame_id = frame_id
-        
         # Cargar datos reales desde archivos .npy
         self._load_keypoints_data()
 
@@ -54,8 +44,8 @@ class GaitAnalysis3D:
         # Construir rutas base - estructura: Server/data/processed/2D_keypoints/patient57/session57/camera0/coordinates/44_3.npy
         base_path = _ROOT / "data" / "processed" / "2D_keypoints" / self.patient_id / self.session_id
         
-        print(f"Cargando keypoints para {self.patient_id}/{self.session_id}/chunk_{self.chunk_id}/frame_{self.frame_id}")
-        print(f"Ruta base: {base_path}")
+        # print(f"Cargando keypoints para {self.patient_id}/{self.session_id}/chunk_{self.chunk_id}/frame_{self.frame_id}")
+        # print(f"Ruta base: {base_path}")
         
         # Verificar que el directorio base existe
         if not base_path.exists():
@@ -66,11 +56,11 @@ class GaitAnalysis3D:
             # Construir ruta del archivo - formato: frame_chunk.npy (ej: 44_3.npy)
             coords_file = base_path / camera_id / "coordinates" / f"{self.frame_id}_{self.chunk_id}.npy"
             confs_file = base_path / camera_id / "confidence" / f"{self.frame_id}_{self.chunk_id}.npy"
-            
-            print(f"Cargando archivos para {camera_id}:")
-            print(f"  Coords: {coords_file}")
-            print(f"  Confs: {confs_file}")
-            
+
+            # print(f"Cargando archivos para {camera_id}:")
+            # print(f"  Coords: {coords_file}")
+            # print(f"  Confs: {confs_file}")
+
             # Verificar que ambos archivos existen
             if not coords_file.exists():
                 raise FileNotFoundError(f"Archivo de coordenadas no encontrado: {coords_file}")
@@ -81,9 +71,9 @@ class GaitAnalysis3D:
                 # Cargar coordenadas y confianzas
                 coords = np.load(coords_file)
                 confs = np.load(confs_file)
-                
-                print(f"  Cargado - Coords: {coords.shape}, Confs: {confs.shape}")
-                
+
+                # print(f"  Cargado - Coords: {coords.shape}, Confs: {confs.shape}")
+
                 # Asignar a los atributos de la clase según la cámara
                 if camera_id == "camera0":
                     self.coordinates_camera_0 = coords
@@ -97,11 +87,11 @@ class GaitAnalysis3D:
                     
             except Exception as e:
                 raise RuntimeError(f"Error al cargar datos para {camera_id}: {e}")
-                
-        print(f"\n✅ Datos cargados exitosamente:")
-        print(f"Camera0 - Coords: {self.coordinates_camera_0.shape}, Confs: {self.confidences_camera_0.shape}")
-        print(f"Camera1 - Coords: {self.coordinates_camera_1.shape}, Confs: {self.confidences_camera_1.shape}")
-        print(f"Camera2 - Coords: {self.coordinates_camera_2.shape}, Confs: {self.confidences_camera_2.shape}")
+
+        # print(f"\nDatos cargados exitosamente:")
+        # print(f"Camera0 - Coords: {self.coordinates_camera_0.shape}, Confs: {self.confidences_camera_0.shape}")
+        # print(f"Camera1 - Coords: {self.coordinates_camera_1.shape}, Confs: {self.confidences_camera_1.shape}")
+        # print(f"Camera2 - Coords: {self.coordinates_camera_2.shape}, Confs: {self.confidences_camera_2.shape}")
 
     def get_camera_diagnostics(self, cam, reference_cam):
         """Calcula diagnósticos básicos de una cámara respecto a la de referencia."""
@@ -127,7 +117,7 @@ class GaitAnalysis3D:
         return load_ensemble_keypoints(base_data_dir, self.patient_id, self.session_id, camera_id, self.chunk_id)
 
     def create_cameras_from_config(self) -> Dict[str, Camera]:
-        """Crea las cámaras usando la configuración de intrínsecos - IGUAL que trial2.py."""
+        """Crea las cámaras usando la configuración de intrínsecos"""
         cameras = {}
         for cam_id in ["camera0", "camera1", "camera2"]:
             # Crear cámara base
@@ -137,16 +127,16 @@ class GaitAnalysis3D:
         return cameras
 
     def prepare_frame_data(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
-        """Prepara los datos del frame con los keypoints y confianzas - IGUAL que trial2.py."""
+        """Prepara los datos del frame con los keypoints y confianzas"""
         return {
             "camera0": (self.coordinates_camera_0.copy(), self.confidences_camera_0.copy()),
             "camera1": (self.coordinates_camera_1.copy(), self.confidences_camera_1.copy()),
             "camera2": (self.coordinates_camera_2.copy(), self.confidences_camera_2.copy()),
         }
 
-    # ========================================================================
-    # ANÁLISIS 2D - RÉPLICA EXACTA de analyze_distances_2D.py
-    # ========================================================================
+    #=====================================================================
+    # ANÁLISIS 2D 
+    #=====================================================================
     
     def filter_valid_keypoints(self, confidence_threshold: float = 0.5) -> np.ndarray:
         """Filtra keypoints que tienen confianza > threshold en todas las cámaras."""
@@ -156,7 +146,7 @@ class GaitAnalysis3D:
                      (self.confidences_camera_1 > confidence_threshold) & \
                      (self.confidences_camera_2 > confidence_threshold)
         
-        print(f"=== FILTRADO DE KEYPOINTS 2D ===")
+        print(f"=== FILTRADO DE KEYPOINTS 2D")
         print(f"Umbral de confianza: {confidence_threshold}")
         print(f"Puntos válidos en todas las cámaras: {np.sum(valid_mask)}/{len(valid_mask)}")
         
@@ -178,7 +168,7 @@ class GaitAnalysis3D:
             "camera2": self.coordinates_camera_2
         }
         
-        print(f"\n=== CÁLCULO DE FACTORES DE ESCALA 2D (ANTEBRAZO = {real_forearm_length_cm} cm) ===")
+        print(f"\n=== CÁLCULO DE FACTORES DE ESCALA 2D (ANTEBRAZO = {real_forearm_length_cm} cm)")
         
         for cam_name, coords in cameras_data.items():
             forearm_measurements = []
@@ -206,12 +196,12 @@ class GaitAnalysis3D:
                 print(f"  Factor de escala: {scale_factor:.4f} cm/pixel")
             else:
                 scale_factors[cam_name] = None
-                print(f"\n{cam_name}: ❌ No se pueden medir antebrazos (puntos no válidos)")
+                print(f"\n{cam_name}: No se pueden medir antebrazos (puntos no válidos)")
         
         return scale_factors
 
     def analyze_2d_body_measurements(self, valid_mask: np.ndarray, scale_factors: Dict[str, float]):
-        """Analiza medidas corporales 2D escaladas para cada cámara - IGUAL que analyze_distances_2D.py."""
+        """Analiza medidas corporales 2D escaladas para cada cámara"""
         
         cameras_data = {
             "camera0": self.coordinates_camera_0,
@@ -226,7 +216,7 @@ class GaitAnalysis3D:
             pixel_distance = self.calculate_2d_distance(coords[p1_idx], coords[p2_idx])
             return pixel_distance * scale_factor  # convertir a cm
         
-        # Definir medidas a calcular (mismas que trial2.py)
+        # Definir medidas a calcular
         measurement_definitions = [
             # Cabeza y cuello
             ("Ancho cara (ojo_izq - ojo_der)", 1, 2, "7-10 cm"),
@@ -262,16 +252,16 @@ class GaitAnalysis3D:
         if valid_factors:
             common_scale_factor = np.mean(valid_factors)
             std_scale = np.std(valid_factors)
-            print(f"\n📏 FACTOR DE ESCALA COMÚN CALCULADO:")
+            print(f"\nFACTOR DE ESCALA COMÚN CALCULADO:")
             print(f"Factor promedio: {common_scale_factor:.4f} cm/pixel (de {len(valid_factors)} cámaras)")
             print(f"Desviación estándar: {std_scale:.4f} cm/pixel")
         else:
             common_scale_factor = None
-            print(f"\n❌ No se pudo calcular factor de escala común")
+            print(f"\nNo se pudo calcular factor de escala común")
             
         for cam_name, coords in cameras_data.items():
             if scale_factors[cam_name] is None:
-                print(f"\n❌ Saltando {cam_name} (no se pudo calcular factor de escala)")
+                print(f"\nSaltando {cam_name} (no se pudo calcular factor de escala)")
                 continue
                 
             print(f"\n{'='*80}")
@@ -289,12 +279,12 @@ class GaitAnalysis3D:
                 value_cm = distance_2d_scaled(coords, p1_idx, p2_idx, common_scale_factor)
                 
                 if np.isnan(value_cm):
-                    status = "❌ N/A"
+                    status = "N/A"
                     value_str = "N/A"
                 else:
                     value_str = f"{value_cm:.1f} cm"
                     
-                    # Análisis básico de realismo (mismos rangos que trial2.py)
+                    # Análisis básico de realismo
                     if "cara" in name.lower() or "ojos" in name.lower():
                         realistic = 3 <= value_cm <= 15
                     elif "hombros" in name.lower():
@@ -320,37 +310,20 @@ class GaitAnalysis3D:
                     else:
                         realistic = True
                         
-                    status = "✅ OK" if realistic else "⚠️ Fuera rango"
+                    status = "OK" if realistic else "Fuera rango"
                     if realistic:
                         realistic_measurements += 1
                     valid_measurements += 1
                 
                 print(f"{name:<40} | {value_str:<12} | {normal_range:<15} | {status}")
             
-            # Resumen por cámara
-            print(f"\n{'='*80}")
-            print(f"RESUMEN DE VALIDACIÓN 2D - {cam_name.upper()}")
-            print(f"{'='*80}")
-            print(f"Medidas válidas: {valid_measurements}/{len(measurement_definitions)}")
-            if valid_measurements > 0:
-                percentage = (realistic_measurements / valid_measurements) * 100
-                print(f"Medidas realistas: {realistic_measurements}/{valid_measurements} ({percentage:.1f}%)")
-                
-                if percentage > 80:
-                    print("🟢 EXCELENTE: Las proporciones 2D son muy realistas")
-                elif percentage > 60:
-                    print("🟡 BUENO: Las proporciones 2D son aceptables") 
-                else:
-                    print("🔴 PROBLEMA: Las proporciones 2D parecen irrealistas")
-            else:
-                print("❌ No hay medidas válidas para evaluar")
 
-    # ========================================================================
-    # ANÁLISIS 3D - RÉPLICA EXACTA de trial2.py
-    # ========================================================================
+    #=====================================================================
+    # ANÁLISIS 3D
+    #=====================================================================
     
     def calculate_scale_factor_from_forearm(self, points_3d: np.ndarray, real_forearm_length_cm: float = 30.0):
-        """Calcula el factor de escala basado en la longitud real del antebrazo - IGUAL que trial2.py."""
+        """Calcula el factor de escala basado en la longitud real del antebrazo"""
         
         # Índices para codo y muñeca (derecha e izquierda)
         # 7: Codo_izq, 8: Codo_der, 9: Muñeca_izq, 10: Muñeca_der
@@ -367,7 +340,7 @@ class GaitAnalysis3D:
             forearm_measurements.append(("Antebrazo derecho", right_forearm))
         
         if not forearm_measurements:
-            print("❌ ERROR: No se pueden calcular medidas de antebrazo")
+            print("ERROR: No se pueden calcular medidas de antebrazo")
             return None
         
         # Usar el promedio de las medidas disponibles
@@ -377,7 +350,7 @@ class GaitAnalysis3D:
         # Factor de escala
         scale_factor = real_forearm_length_m / avg_forearm_length_m
         
-        print(f"\n=== CÁLCULO DE FACTOR DE ESCALA (BASADO EN ANTEBRAZO) ===")
+        print(f"\n=== CÁLCULO DE FACTOR DE ESCALA (BASADO EN ANTEBRAZO)")
         print(f"Longitud real del antebrazo: {real_forearm_length_cm:.1f} cm")
         for name, length in forearm_measurements:
             print(f"{name}: {length*100:.1f} cm (3D estimado)")
@@ -387,7 +360,7 @@ class GaitAnalysis3D:
         return scale_factor
 
     def analyze_body_measurements_scaled(self, points_3d: np.ndarray, method_name: str, scale_factor: float):
-        """Analiza las medidas corporales con escala corregida - IGUAL que trial2.py."""
+        """Analiza las medidas corporales con escala corregida"""
         
         # Aplicar factor de escala a todos los puntos
         scaled_points = points_3d * scale_factor
@@ -401,8 +374,8 @@ class GaitAnalysis3D:
         print(f"ANÁLISIS DE MEDIDAS CORPORALES ESCALADAS ({method_name})")
         print(f"Referencia: Antebrazo = 30.0 cm, Factor de escala: {scale_factor:.4f}")
         print(f"{'='*70}")
-        
-        # Medidas principales del cuerpo - IGUALES que trial2.py
+
+        # Medidas principales del cuerpo
         measurements = []
         
         # Cabeza y cuello
@@ -466,7 +439,7 @@ class GaitAnalysis3D:
         
         for name, value, normal_range in measurements:
             if np.isnan(value):
-                status = "❌ N/A"
+                status = "N/A"
                 value_str = "N/A"
             else:
                 value_str = f"{value:.1f} cm"
@@ -499,7 +472,7 @@ class GaitAnalysis3D:
                 else:
                     realistic = True
                     
-                status = "✅ OK" if realistic else "⚠️ Fuera rango"
+                status = "OK" if realistic else "Fuera rango"
                 if realistic:
                     realistic_measurements += 1
                 valid_measurements += 1
@@ -514,22 +487,22 @@ class GaitAnalysis3D:
         print(f"Medidas realistas: {realistic_measurements}/{valid_measurements} ({realistic_measurements/max(valid_measurements,1)*100:.1f}%)")
         
         if realistic_measurements / max(valid_measurements, 1) > 0.8:
-            print("🟢 EXCELENTE realismo anatómico")
+            print("EXCELENTE realismo anatómico")
         elif realistic_measurements / max(valid_measurements, 1) > 0.6:
-            print("🟡 BUENO realismo anatómico")
+            print("BUEN realismo anatómico")
         else:
-            print("🔴 POBRE realismo anatómico")
+            print("POBRE realismo anatómico")
 
     def run_full_analysis(self):
-        """Ejecuta el análisis completo - RÉPLICA EXACTA de trial2.py y analyze_distances_2D.py"""
+        """Ejecuta el análisis completo"""
         
         logger.info(f"Iniciando análisis completo para {self.patient_id}/{self.session_id}/chunk_{self.chunk_id}/frame_{self.frame_id}")
         
-        print("=== ANÁLISIS DE MEDIDAS CORPORALES 2D ===")
+        print("=== ANÁLISIS DE MEDIDAS CORPORALES 2D")
         print("Basado en keypoints 2D con antebrazo de referencia = 30.0 cm")
         print()
         
-        # === PARTE 1: ANÁLISIS 2D (analyze_distances_2D.py) ===
+        # PARTE 1: ANÁLISIS 2D
         
         # Filtrar keypoints válidos
         valid_mask = self.filter_valid_keypoints(confidence_threshold=self.CONFIDENCE_THRESHOLD)
@@ -540,20 +513,20 @@ class GaitAnalysis3D:
         # Análisis de medidas corporales por cámara
         self.analyze_2d_body_measurements(valid_mask, scale_factors)
         
-        # === PARTE 2: ANÁLISIS 3D (trial2.py) ===
+        # PARTE 2: ANÁLISIS 3D
         
         logger.info("Configurando cámaras...")
         # Fijar semilla para reproducibilidad
         np.random.seed(42)
         
-        # Preparar datos exactamente igual que trial2.py
+        # Preparar datos
         cameras = self.create_cameras_from_config()
         frame_keypoints = self.prepare_frame_data()
         
         logger.info("Estimando parámetros extrínsecos...")
         
-        # Método Riguroso: Estimación con geometría epipolar - IGUAL que trial2.py
-        print("\n=== Estimación Rigurosa con Geometría Epipolar ===")
+        # Método Riguroso: Estimación con geometría epipolar
+        print("\n=== Estimación Rigurosa con Geometría Epipolar")
         try:
             cameras_rigorous = estimate_extrinsics_rigorous(
                 cameras, frame_keypoints, self.CONFIDENCE_THRESHOLD, self.KNOWN_BASELINE_CM / 100.0
@@ -570,7 +543,7 @@ class GaitAnalysis3D:
             
             logger.info("Ejecutando triangulación 3D...")
             
-            # === PARTE 1: Triangulación SVD ===
+            # PARTE 1: Triangulación SVD
             print(f"\n{'='*50}")
             print("PARTE 1: TRIANGULACIÓN SVD (Sin refinamiento)")
             print(f"{'='*50}")
@@ -585,7 +558,7 @@ class GaitAnalysis3D:
             for cam_id, error in errors_svd.items():
                 print(f"  {cam_id}: {error:.2f} píxeles")
             
-            # === PARTE 2: Bundle Adjustment ===
+            # PARTE 2: Bundle Adjustment
             print(f"\n{'='*50}")
             print("PARTE 2: BUNDLE ADJUSTMENT (Refinamiento)")
             print(f"{'='*50}")
@@ -604,7 +577,7 @@ class GaitAnalysis3D:
                 for cam_id, error in errors_ba.items():
                     print(f"  {cam_id}: {error:.2f} píxeles")
                 
-                # === COMPARACIÓN ===
+                # COMPARACIÓN
                 print(f"\n{'='*50}")
                 print("COMPARACIÓN SVD vs BUNDLE ADJUSTMENT")
                 print(f"{'='*50}")
@@ -620,10 +593,10 @@ class GaitAnalysis3D:
                 print(f"\nError promedio: {avg_error_svd:.2f} -> {avg_error_ba:.2f} px ({total_improvement:+.2f} px)")
                 
             else:
-                print("❌ ERROR: No hay puntos válidos de SVD para refinar con Bundle Adjustment")
+                print("ERROR: No hay puntos válidos de SVD para refinar con Bundle Adjustment")
                 points_3d_ba = points_3d_svd
             
-            # === PARTE 3: Full Bundle Adjustment ===
+            # PARTE 3: Full Bundle Adjustment
             print(f"\n{'='*50}")
             print("PARTE 3: FULL BUNDLE ADJUSTMENT (Optimización Completa)")
             print(f"{'='*50}")
@@ -659,7 +632,7 @@ class GaitAnalysis3D:
                     print(f"\n--- Cambios en Parámetros de Cámara ---")
                     print_camera_changes(cameras_rigorous, cameras_full_ba)
                     
-                    # === COMPARACIÓN COMPLETA ===
+                    # COMPARACIÓN COMPLETA
                     print(f"\n{'='*60}")
                     print("COMPARACIÓN SVD vs BA vs FULL BA")
                     print(f"{'='*60}")
@@ -692,18 +665,18 @@ class GaitAnalysis3D:
                     
                 except Exception as e:
                     logger.error(f"Error en Full Bundle Adjustment: {e}")
-                    print(f"❌ ERROR en Full Bundle Adjustment: {e}")
+                    print(f"ERROR en Full Bundle Adjustment: {e}")
                     # Usar los resultados de BA normal como fallback
                     cameras_full_ba = cameras_rigorous
                     points_3d_full_ba = points_3d_ba
             else:
-                print("❌ ERROR: No hay puntos válidos de SVD para Full Bundle Adjustment")
+                print("ERROR: No hay puntos válidos de SVD para Full Bundle Adjustment")
                 cameras_full_ba = cameras_rigorous
                 points_3d_full_ba = points_3d_svd
             
             logger.info(f"Triangulación completada - SVD: {len(points_3d_svd)} puntos, BA: {len(points_3d_ba)} puntos, Full BA: {len(points_3d_full_ba)} puntos")
             
-            # === ANÁLISIS DE MEDIDAS CORPORALES ESCALADAS ===
+            # ANÁLISIS DE MEDIDAS CORPORALES ESCALADAS
             
             methods_data = [
                 ("SVD", points_3d_svd), 
@@ -719,18 +692,16 @@ class GaitAnalysis3D:
                     # Análisis con escala corregida
                     self.analyze_body_measurements_scaled(points_3d, method_name, scale_factor)
                 else:
-                    print(f"❌ ERROR: No se pudo calcular factor de escala para {method_name}")
+                    print(f"ERROR: No se pudo calcular factor de escala para {method_name}")
             
             logger.info("Análisis completo finalizado exitosamente")
             
         except Exception as e:
             logger.error(f"Error en estimación de extrínsecos: {e}")
-            print(f"❌ ERROR en reconstrucción 3D: {e}")
+            print(f"ERROR en reconstrucción 3D: {e}")
 
 
 def main():
-    """Función principal - IGUAL que trial2.py"""
-    # Usar los mismos parámetros que trial2.py
     patient_id = "patient57"
     session_id = "session57"
     chunk_id = 3

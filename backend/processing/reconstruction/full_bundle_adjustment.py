@@ -1,5 +1,23 @@
 """
 Bundle Adjustment completo que optimiza tanto puntos 3D como parámetros extrínsecos de cámaras.
+
+Esta implementación ha sido refactorizada para soportar un número arbitrario de cámaras
+manteniendo exactamente la misma funcionalidad que la versión original de 3 cámaras.
+
+Características:
+- Soporte para N cámaras (N >= 1)
+- Optimización simultánea de puntos 3D y parámetros extrínsecos
+- Cámara de referencia configurable (por defecto la primera)
+- Mantiene compatibilidad hacia atrás con código existente
+- Utiliza representación de Rodrigues para rotaciones
+- Algoritmo Levenberg-Marquardt para optimización no lineal
+
+Funciones principales:
+- full_bundle_adjustment(): Función principal para N cámaras
+- bundle_adjustment_residual(): Cálculo de residuos para N cámaras  
+- print_camera_changes(): Muestra cambios para todas las cámaras
+- rodrigues_to_rotation_matrix() / rotation_matrix_to_rodrigues(): Conversiones
+- project_point(): Proyección de puntos 3D a imagen
 """
 
 import numpy as np
@@ -73,8 +91,20 @@ def project_point(point_3d: np.ndarray, camera) -> np.ndarray:
 
 def bundle_adjustment_residual(params: np.ndarray, cameras: Dict, 
                               frame_keypoints: Dict, point_indices: np.ndarray,
-                              camera_param_sizes: Dict) -> np.ndarray:
-    """Función de residuos para Bundle Adjustment completo."""
+                              camera_param_sizes: Dict, reference_camera: str = "camera0",
+                              confidence_threshold: float = 0.5) -> np.ndarray:
+    """
+    Función de residuos para Bundle Adjustment completo con soporte para N cámaras.
+    
+    Args:
+        params: Vector de parámetros a optimizar [puntos_3d, parámetros_cámaras]
+        cameras: Diccionario de cámaras
+        frame_keypoints: Keypoints por cámara
+        point_indices: Índices de puntos válidos
+        camera_param_sizes: Tamaños de parámetros por cámara
+        reference_camera: ID de la cámara de referencia (no se optimiza)
+        confidence_threshold: Umbral de confianza para considerar puntos válidos
+    """
     
     residuals = []
     param_offset = 0
@@ -84,38 +114,47 @@ def bundle_adjustment_residual(params: np.ndarray, cameras: Dict,
     points_3d = params[:n_points * 3].reshape(n_points, 3)
     param_offset += n_points * 3
     
+    # Obtener lista ordenada de IDs de cámaras
+    camera_ids = sorted(cameras.keys())
+    
     # Extraer parámetros de cámaras y actualizar cámaras
     updated_cameras = {}
-    for cam_id in ["camera0", "camera1", "camera2"]:
-        updated_cameras[cam_id] = cameras[cam_id]
-        
-        if cam_id != "camera0":  # Camera0 es la referencia
+    for cam_id in camera_ids:
+        if cam_id == reference_camera:
+            # Cámara de referencia no se optimiza
+            updated_cameras[cam_id] = cameras[cam_id]
+        else:
             param_size = camera_param_sizes[cam_id]
-            cam_params = params[param_offset:param_offset + param_size]
-            param_offset += param_size
-            
-            # Actualizar parámetros extrínsecos
-            if param_size == 6:  # rvec (3) + tvec (3)
-                rvec = cam_params[:3]
-                tvec = cam_params[3:6]
+            if param_size > 0:
+                cam_params = params[param_offset:param_offset + param_size]
+                param_offset += param_size
                 
-                # Actualizar cámara con nuevos parámetros
-                updated_cameras[cam_id] = type(cameras[cam_id])(
-                    camera_id=cameras[cam_id].camera_id,
-                    K=cameras[cam_id].K.copy(),
-                    dist_coeffs=cameras[cam_id].dist_coeffs.copy(),
-                    R=rodrigues_to_rotation_matrix(rvec),
-                    t=tvec.reshape(3, 1)
-                )
+                # Actualizar parámetros extrínsecos
+                if param_size == 6:  # rvec (3) + tvec (3)
+                    rvec = cam_params[:3]
+                    tvec = cam_params[3:6]
+                    
+                    # Actualizar cámara con nuevos parámetros
+                    updated_cameras[cam_id] = type(cameras[cam_id])(
+                        camera_id=cameras[cam_id].camera_id,
+                        K=cameras[cam_id].K.copy(),
+                        dist_coeffs=cameras[cam_id].dist_coeffs.copy(),
+                        R=rodrigues_to_rotation_matrix(rvec),
+                        t=tvec.reshape(3, 1)
+                    )
+                else:
+                    updated_cameras[cam_id] = cameras[cam_id]
+            else:
+                updated_cameras[cam_id] = cameras[cam_id]
     
-    # Calcular residuos de reproyección de forma consistente
+    # Calcular residuos de reproyección para todas las cámaras
     for i, point_idx in enumerate(point_indices):
         point_3d = points_3d[i]
         
-        for cam_id in ["camera0", "camera1", "camera2"]:
+        for cam_id in camera_ids:
             coords, confs = frame_keypoints[cam_id]
             
-            if confs[point_idx] > 0.5:  # Punto válido
+            if confs[point_idx] > confidence_threshold:  # Punto válido
                 observed = coords[point_idx]
                 projected = project_point(point_3d, updated_cameras[cam_id])
                 
@@ -132,31 +171,50 @@ def bundle_adjustment_residual(params: np.ndarray, cameras: Dict,
     return np.array(residuals)
 
 def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
-                          frame_keypoints: Dict, confidence_threshold: float = 0.5) -> Tuple[np.ndarray, Dict]:
+                          frame_keypoints: Dict, confidence_threshold: float = 0.5,
+                          reference_camera: str = "camera0") -> Tuple[np.ndarray, Dict]:
     """
-    Bundle Adjustment completo que optimiza puntos 3D y parámetros extrínsecos.
+    Bundle Adjustment completo que optimiza puntos 3D y parámetros extrínsecos para N cámaras.
+    
+    Esta función ha sido refactorizada para soportar cualquier número de cámaras manteniendo
+    exactamente la misma lógica que la versión original de 3 cámaras.
     
     Args:
         points_3d_init: Puntos 3D iniciales (N, 3)
-        cameras: Diccionario de cámaras
+        cameras: Diccionario de cámaras (soporta cualquier número >= 1)
         frame_keypoints: Datos de keypoints por cámara
         confidence_threshold: Umbral de confianza
+        reference_camera: ID de la cámara de referencia (no se optimiza)
     
     Returns:
         Tuple[puntos_3d_optimizados, cámaras_optimizadas]
     """
     
-    # Identificar puntos válidos
-    valid_points = []
-    coords_0, confs_0 = frame_keypoints["camera0"]
-    coords_1, confs_1 = frame_keypoints["camera1"] 
-    coords_2, confs_2 = frame_keypoints["camera2"]
+    # Obtener lista ordenada de IDs de cámaras
+    camera_ids = sorted(cameras.keys())
     
+    # Verificar que la cámara de referencia existe
+    if reference_camera not in camera_ids:
+        logger.error(f"Cámara de referencia {reference_camera} no encontrada en {camera_ids}")
+        return points_3d_init, cameras
+    
+    # Identificar puntos válidos en todas las cámaras
+    valid_points = []
+    
+    # Crear máscara de validez para todas las cámaras
     for i in range(len(points_3d_init)):
-        if (not np.isnan(points_3d_init[i, 0]) and 
-            confs_0[i] > confidence_threshold and
-            confs_1[i] > confidence_threshold and 
-            confs_2[i] > confidence_threshold):
+        if np.isnan(points_3d_init[i, 0]):
+            continue
+            
+        # Verificar que el punto es válido en todas las cámaras
+        valid_in_all = True
+        for cam_id in camera_ids:
+            coords, confs = frame_keypoints[cam_id]
+            if confs[i] <= confidence_threshold:
+                valid_in_all = False
+                break
+        
+        if valid_in_all:
             valid_points.append(i)
     
     if len(valid_points) == 0:
@@ -168,20 +226,23 @@ def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
     # Preparar puntos 3D iniciales válidos
     valid_points_3d = points_3d_init[valid_points]
     
-    # Preparar parámetros de cámaras (solo extrínsecos de camera1 y camera2)
+    # Preparar parámetros de cámaras (extrínsecos de todas excepto la de referencia)
     camera_params = []
-    camera_param_sizes = {"camera0": 0}  # Camera0 es referencia
+    camera_param_sizes = {}
     
-    for cam_id in ["camera1", "camera2"]:
-        cam = cameras[cam_id]
-        if hasattr(cam, 'R') and hasattr(cam, 't'):
-            rvec = rotation_matrix_to_rodrigues(cam.R)
-            tvec = cam.t.flatten()
-            camera_params.extend(rvec)
-            camera_params.extend(tvec)
-            camera_param_sizes[cam_id] = 6
+    for cam_id in camera_ids:
+        if cam_id == reference_camera:
+            camera_param_sizes[cam_id] = 0  # Cámara de referencia no se optimiza
         else:
-            camera_param_sizes[cam_id] = 0
+            cam = cameras[cam_id]
+            if hasattr(cam, 'R') and hasattr(cam, 't'):
+                rvec = rotation_matrix_to_rodrigues(cam.R)
+                tvec = cam.t.flatten()
+                camera_params.extend(rvec)
+                camera_params.extend(tvec)
+                camera_param_sizes[cam_id] = 6
+            else:
+                camera_param_sizes[cam_id] = 0
     
     # Concatenar todos los parámetros
     x0 = np.concatenate([
@@ -201,7 +262,8 @@ def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
         result = least_squares(
             bundle_adjustment_residual,
             x0,
-            args=(cameras, frame_keypoints, np.array(valid_points), camera_param_sizes),
+            args=(cameras, frame_keypoints, np.array(valid_points), camera_param_sizes, 
+                  reference_camera, confidence_threshold),
             method='lm',  # Levenberg-Marquardt
             max_nfev=1000,
             ftol=1e-8,
@@ -218,8 +280,8 @@ def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
             
             # Extraer parámetros de cámaras optimizados
             optimized_cameras = {}
-            for cam_id in ["camera0", "camera1", "camera2"]:
-                if cam_id == "camera0":
+            for cam_id in camera_ids:
+                if cam_id == reference_camera:
                     optimized_cameras[cam_id] = cameras[cam_id]
                 else:
                     param_size = camera_param_sizes[cam_id]
@@ -248,7 +310,8 @@ def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
             
             # Mostrar estadísticas de mejora
             initial_residual = np.sum(bundle_adjustment_residual(x0, cameras, frame_keypoints, 
-                                                                np.array(valid_points), camera_param_sizes)**2)
+                                                                np.array(valid_points), camera_param_sizes,
+                                                                reference_camera, confidence_threshold)**2)
             final_residual = result.cost
             improvement = initial_residual - final_residual
             
@@ -264,14 +327,24 @@ def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
         logger.error(f"Error en Bundle Adjustment completo: {e}")
         return points_3d_init, cameras
 
-def print_camera_changes(original_cameras: Dict, optimized_cameras: Dict):
-    """Imprime los cambios en los parámetros de las cámaras."""
+def print_camera_changes(original_cameras: Dict, optimized_cameras: Dict, reference_camera: str = "camera0"):
+    """
+    Imprime los cambios en los parámetros de las cámaras para cualquier número de cámaras.
+    
+    Args:
+        original_cameras: Cámaras originales
+        optimized_cameras: Cámaras optimizadas
+        reference_camera: ID de la cámara de referencia (no se muestra por ser fija)
+    """
     
     print(f"\n{'='*60}")
     print("CAMBIOS EN PARÁMETROS EXTRÍNSECOS")
     print(f"{'='*60}")
     
-    for cam_id in ["camera1", "camera2"]:  # Camera0 es referencia
+    # Obtener todas las cámaras excepto la de referencia
+    camera_ids = [cam_id for cam_id in sorted(original_cameras.keys()) if cam_id != reference_camera]
+    
+    for cam_id in camera_ids:
         if cam_id in original_cameras and cam_id in optimized_cameras:
             orig_cam = original_cameras[cam_id]
             opt_cam = optimized_cameras[cam_id]
