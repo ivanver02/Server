@@ -1,25 +1,3 @@
-"""
-Bundle Adjustment completo que optimiza tanto puntos 3D como parámetros extrínsecos de cámaras.
-
-Esta implementación ha sido refactorizada para soportar un número arbitrario de cámaras
-manteniendo exactamente la misma funcionalidad que la versión original de 3 cámaras.
-
-Características:
-- Soporte para N cámaras (N >= 1)
-- Optimización simultánea de puntos 3D y parámetros extrínsecos
-- Cámara de referencia configurable (por defecto la primera)
-- Mantiene compatibilidad hacia atrás con código existente
-- Utiliza representación de Rodrigues para rotaciones
-- Algoritmo Levenberg-Marquardt para optimización no lineal
-
-Funciones principales:
-- full_bundle_adjustment(): Función principal para N cámaras
-- bundle_adjustment_residual(): Cálculo de residuos para N cámaras  
-- print_camera_changes(): Muestra cambios para todas las cámaras
-- rodrigues_to_rotation_matrix() / rotation_matrix_to_rodrigues(): Conversiones
-- project_point(): Proyección de puntos 3D a imagen
-"""
-
 import numpy as np
 from scipy.optimize import least_squares
 from typing import Dict, Tuple, List, Optional
@@ -327,47 +305,49 @@ def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
         logger.error(f"Error en Bundle Adjustment completo: {e}")
         return points_3d_init, cameras
 
-def print_camera_changes(original_cameras: Dict, optimized_cameras: Dict, reference_camera: str = "camera0"):
+
+def print_extrinsic_matrices_bundle(cameras: Dict, title: str = "PARÁMETROS EXTRÍNSECOS BUNDLE ADJUSTMENT"):
     """
-    Imprime los cambios en los parámetros de las cámaras para cualquier número de cámaras.
+    Muestra las matrices de parámetros extrínsecos optimizados por Bundle Adjustment.
     
     Args:
-        original_cameras: Cámaras originales
-        optimized_cameras: Cámaras optimizadas
-        reference_camera: ID de la cámara de referencia (no se muestra por ser fija)
+        cameras: Diccionario de cámaras optimizadas
+        title: Título a mostrar en el encabezado
     """
+    print(f"\n{'='*70}")
+    print(f"{title}")
+    print(f"{'='*70}")
     
-    print(f"\n{'='*60}")
-    print("CAMBIOS EN PARÁMETROS EXTRÍNSECOS")
-    print(f"{'='*60}")
-    
-    # Obtener todas las cámaras excepto la de referencia
-    camera_ids = [cam_id for cam_id in sorted(original_cameras.keys()) if cam_id != reference_camera]
+    camera_ids = sorted(cameras.keys())
     
     for cam_id in camera_ids:
-        if cam_id in original_cameras and cam_id in optimized_cameras:
-            orig_cam = original_cameras[cam_id]
-            opt_cam = optimized_cameras[cam_id]
+        cam = cameras[cam_id]
+        print(f"\n{cam_id.upper()}:")
+        
+        if hasattr(cam, 'R') and hasattr(cam, 't'):
+            print("  Matriz de Rotación Optimizada (R):")
+            for i, row in enumerate(cam.R):
+                print(f"    [{row[0]:8.5f}, {row[1]:8.5f}, {row[2]:8.5f}]")
             
-            print(f"\n{cam_id.upper()}:")
+            print("  Vector de Traslación Optimizado (t):")
+            t_flat = cam.t.flatten()
+            print(f"    [{t_flat[0]:8.5f}, {t_flat[1]:8.5f}, {t_flat[2]:8.5f}] metros")
             
-            if hasattr(orig_cam, 'R') and hasattr(opt_cam, 'R'):
-                # Cambios en rotación
-                orig_rvec = rotation_matrix_to_rodrigues(orig_cam.R)
-                opt_rvec = rotation_matrix_to_rodrigues(opt_cam.R)
-                rotation_change = np.linalg.norm(opt_rvec - orig_rvec)
-                print(f"  Cambio en rotación: {rotation_change:.6f} rad ({np.degrees(rotation_change):.3f}°)")
-                
-                # Cambios en traslación
-                orig_t = orig_cam.t.flatten()
-                opt_t = opt_cam.t.flatten()
-                translation_change = np.linalg.norm(opt_t - orig_t)
-                print(f"  Cambio en traslación: {translation_change:.6f} m")
-                
-                # Baseline changes
-                orig_baseline = np.linalg.norm(orig_t)
-                opt_baseline = np.linalg.norm(opt_t)
-                baseline_change = opt_baseline - orig_baseline
-                print(f"  Baseline: {orig_baseline:.3f} -> {opt_baseline:.3f} m ({baseline_change:+.6f} m)")
-            else:
-                print("  No hay parámetros extrínsecos disponibles")
+            # Información adicional
+            baseline = np.linalg.norm(cam.t)
+            print(f"  Baseline optimizado: {baseline:.5f} metros")
+            
+            # Ángulos de Euler aproximados
+            import math
+            rx = math.degrees(math.atan2(cam.R[2,1], cam.R[2,2]))
+            ry = math.degrees(math.atan2(-cam.R[2,0], math.sqrt(cam.R[2,1]**2 + cam.R[2,2]**2)))
+            rz = math.degrees(math.atan2(cam.R[1,0], cam.R[0,0]))
+            print(f"  Ángulos optimizados: Rx={rx:.2f}°, Ry={ry:.2f}°, Rz={rz:.2f}°")
+            
+            # Información de optimización
+            if hasattr(cam, 'optimization_info'):
+                print(f"  Info optimización: {cam.optimization_info}")
+        else:
+            print("  Sin parámetros extrínsecos (cámara de referencia)")
+    
+    print(f"\n{'='*70}")

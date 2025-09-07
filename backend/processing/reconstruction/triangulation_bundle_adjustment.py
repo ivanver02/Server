@@ -5,7 +5,7 @@ from scipy.optimize import least_squares
 from camera import Camera
 
 
-def _residuals(points_3d_flat: np.ndarray, cameras: Dict[str, Camera], frame_keypoints: Dict[str, Tuple[np.ndarray, np.ndarray]], valid_mask: np.ndarray) -> np.ndarray:
+def residuals(points_3d_flat: np.ndarray, cameras: Dict[str, Camera], frame_keypoints: Dict[str, Tuple[np.ndarray, np.ndarray]], valid_mask: np.ndarray) -> np.ndarray:
     K = valid_mask.shape[0]
     pts3d = points_3d_flat.reshape(K, 3)
     res = []
@@ -64,7 +64,7 @@ def refine_frame_bundle_adjustment(initial_points_3d: np.ndarray, cameras: Dict[
         print(f"x0 stats: min={x0.min():.3f}, max={x0.max():.3f}, finite={np.sum(np.isfinite(x0))}/{len(x0)}")
         
         result = least_squares(
-            _residuals, x0, 
+            residuals, x0, 
             args=(cameras, frame_keypoints, full_reasonable_mask),  # Usar máscara más restrictiva
             method="lm",  # Levenberg-Marquardt
             max_nfev=200,

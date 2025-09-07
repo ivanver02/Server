@@ -13,9 +13,10 @@ from camera import Camera
 from triangulation_svd import triangulate_frame_svd
 from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
 from reprojection import reprojection_error
-from pose_estimation_rigorous import estimate_extrinsics_rigorous
+from calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
 from config.camera_intrinsics import CAMERA_INTRINSICS
-from full_bundle_adjustment import full_bundle_adjustment, print_camera_changes
+from full_bundle_adjustment import full_bundle_adjustment, print_extrinsic_matrices_bundle
+from backend.tests.reconstruccion_2D import load_ensemble_keypoints
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -27,7 +28,6 @@ class GaitAnalysis3D:
     
     # Constantes
     CONFIDENCE_THRESHOLD = 0.5
-    KNOWN_BASELINE_CM = 72.0  # 72 cm entre cámaras 0 y 2
     FOREARM_REFERENCE_CM = 30.0  # 30 cm como referencia
 
     def __init__(self, patient_id: str, session_id: str, chunk_id: int, frame_id: int):
@@ -42,11 +42,8 @@ class GaitAnalysis3D:
         """Carga los datos de keypoints 2D desde los archivos .npy procesados."""
         
         # Construir rutas base - estructura: Server/data/processed/2D_keypoints/patient57/session57/camera0/coordinates/44_3.npy
-        base_path = _ROOT / "data" / "processed" / "2D_keypoints" / self.patient_id / self.session_id
-        
-        # print(f"Cargando keypoints para {self.patient_id}/{self.session_id}/chunk_{self.chunk_id}/frame_{self.frame_id}")
-        # print(f"Ruta base: {base_path}")
-        
+        base_path = _ROOT / "data" / "processed" / "2D_keypoints" / f"patient{self.patient_id}" / f"session{self.session_id}"
+
         # Verificar que el directorio base existe
         if not base_path.exists():
             raise FileNotFoundError(f"Directorio base no encontrado: {base_path}")
@@ -56,10 +53,6 @@ class GaitAnalysis3D:
             # Construir ruta del archivo - formato: frame_chunk.npy (ej: 44_3.npy)
             coords_file = base_path / camera_id / "coordinates" / f"{self.frame_id}_{self.chunk_id}.npy"
             confs_file = base_path / camera_id / "confidence" / f"{self.frame_id}_{self.chunk_id}.npy"
-
-            # print(f"Cargando archivos para {camera_id}:")
-            # print(f"  Coords: {coords_file}")
-            # print(f"  Confs: {confs_file}")
 
             # Verificar que ambos archivos existen
             if not coords_file.exists():
@@ -71,8 +64,6 @@ class GaitAnalysis3D:
                 # Cargar coordenadas y confianzas
                 coords = np.load(coords_file)
                 confs = np.load(confs_file)
-
-                # print(f"  Cargado - Coords: {coords.shape}, Confs: {confs.shape}")
 
                 # Asignar a los atributos de la clase según la cámara
                 if camera_id == "camera0":
@@ -87,12 +78,7 @@ class GaitAnalysis3D:
                     
             except Exception as e:
                 raise RuntimeError(f"Error al cargar datos para {camera_id}: {e}")
-
-        # print(f"\nDatos cargados exitosamente:")
-        # print(f"Camera0 - Coords: {self.coordinates_camera_0.shape}, Confs: {self.confidences_camera_0.shape}")
-        # print(f"Camera1 - Coords: {self.coordinates_camera_1.shape}, Confs: {self.confidences_camera_1.shape}")
-        # print(f"Camera2 - Coords: {self.coordinates_camera_2.shape}, Confs: {self.confidences_camera_2.shape}")
-
+            
     def get_camera_diagnostics(self, cam, reference_cam):
         """Calcula diagnósticos básicos de una cámara respecto a la de referencia."""
         # Calcular baseline
@@ -113,7 +99,6 @@ class GaitAnalysis3D:
         
     def load_ensemble_keypoints(self, base_data_dir: Path, camera_id: int) -> Dict[int, Dict[str, np.ndarray]]:
         """Carga los keypoints y confianzas del ensemble para la cámara dada"""
-        from backend.tests.reconstruccion_2D import load_ensemble_keypoints
         return load_ensemble_keypoints(base_data_dir, self.patient_id, self.session_id, camera_id, self.chunk_id)
 
     def create_cameras_from_config(self) -> Dict[str, Camera]:
@@ -134,9 +119,9 @@ class GaitAnalysis3D:
             "camera2": (self.coordinates_camera_2.copy(), self.confidences_camera_2.copy()),
         }
 
-    #=====================================================================
+    #================
     # ANÁLISIS 2D 
-    #=====================================================================
+    #================
     
     def filter_valid_keypoints(self, confidence_threshold: float = 0.5) -> np.ndarray:
         """Filtra keypoints que tienen confianza > threshold en todas las cámaras."""
@@ -242,8 +227,8 @@ class GaitAnalysis3D:
             ("Pantorrilla der (rodilla-tobillo)", 14, 16, "35-45 cm"),
             ("Pierna completa der (cadera-tobillo)", 12, 16, "75-100 cm"),
             # Medidas adicionales
-            ("Estatura aprox (cabeza-tobillo_izq)", 0, 15, "150-190 cm"),
-            ("Estatura aprox (cabeza-tobillo_der)", 0, 16, "150-190 cm"),
+            ("Estatura aprox (nariz-tobillo_izq)", 0, 15, "150-190 cm"),
+            ("Estatura aprox (nariz-tobillo_der)", 0, 16, "150-190 cm"),
             ("Envergadura (muñeca_izq - muñeca_der)", 9, 10, "150-180 cm"),
         ]
         
@@ -318,9 +303,9 @@ class GaitAnalysis3D:
                 print(f"{name:<40} | {value_str:<12} | {normal_range:<15} | {status}")
             
 
-    #=====================================================================
+    #===============
     # ANÁLISIS 3D
-    #=====================================================================
+    #===============
     
     def calculate_scale_factor_from_forearm(self, points_3d: np.ndarray, real_forearm_length_cm: float = 30.0):
         """Calcula el factor de escala basado en la longitud real del antebrazo"""
@@ -423,9 +408,9 @@ class GaitAnalysis3D:
         
         # Medidas adicionales
         measurements.extend([
-            ("Estatura aprox (cabeza-tobillo_izq)", 
+            ("Estatura aprox (nariz-tobillo_izq)", 
              distance_3d(0, 15) if not np.isnan(distance_3d(0, 15)) else np.nan, "150-190 cm"),
-            ("Estatura aprox (cabeza-tobillo_der)", 
+            ("Estatura aprox (nariz-tobillo_der)", 
              distance_3d(0, 16) if not np.isnan(distance_3d(0, 16)) else np.nan, "150-190 cm"),
             ("Envergadura (muñeca_izq - muñeca_der)", distance_3d(9, 10), "150-180 cm"),
         ])
@@ -478,26 +463,12 @@ class GaitAnalysis3D:
                 valid_measurements += 1
             
             print(f"{name:<40} | {value_str:<12} | {normal_range:<15} | {status}")
-        
-        # Resumen
-        print(f"\n{'='*70}")
-        print(f"RESUMEN DE VALIDACIÓN ESCALADA ({method_name})")
-        print(f"{'='*70}")
-        print(f"Medidas válidas: {valid_measurements}/{len(measurements)}")
-        print(f"Medidas realistas: {realistic_measurements}/{valid_measurements} ({realistic_measurements/max(valid_measurements,1)*100:.1f}%)")
-        
-        if realistic_measurements / max(valid_measurements, 1) > 0.8:
-            print("EXCELENTE realismo anatómico")
-        elif realistic_measurements / max(valid_measurements, 1) > 0.6:
-            print("BUEN realismo anatómico")
-        else:
-            print("POBRE realismo anatómico")
 
     def run_full_analysis(self):
         """Ejecuta el análisis completo"""
-        
-        logger.info(f"Iniciando análisis completo para {self.patient_id}/{self.session_id}/chunk_{self.chunk_id}/frame_{self.frame_id}")
-        
+
+        logger.info(f"Iniciando análisis completo para patient{self.patient_id}/session{self.session_id}/chunk_{self.chunk_id}/frame_{self.frame_id}")
+
         print("=== ANÁLISIS DE MEDIDAS CORPORALES 2D")
         print("Basado en keypoints 2D con antebrazo de referencia = 30.0 cm")
         print()
@@ -528,18 +499,12 @@ class GaitAnalysis3D:
         # Método Riguroso: Estimación con geometría epipolar
         print("\n=== Estimación Rigurosa con Geometría Epipolar")
         try:
-            cameras_rigorous = estimate_extrinsics_rigorous(
-                cameras, frame_keypoints, self.CONFIDENCE_THRESHOLD, self.KNOWN_BASELINE_CM / 100.0
+            cameras_rigorous = estimate_extrinsics(
+                cameras, frame_keypoints, self.CONFIDENCE_THRESHOLD
             )
             
-            # Mostrar resultados de calibración rigurosa
-            print("\n--- Parámetros Extrínsecos Estimados ---")
-            for cam_id, cam in cameras_rigorous.items():
-                if cam_id != "camera0":
-                    print(f"\n{cam_id}:")
-                    print(f"  R = \n{cam.R}")
-                    print(f"  t = {cam.t.flatten()}")
-                    print(f"  Baseline = {np.linalg.norm(cam.t):.3f}m")
+            # Mostrar matrices de parámetros extrínsecos estimados
+            print_extrinsic_matrices(cameras_rigorous, "PARÁMETROS EXTRÍNSECOS ESTIMADOS")
             
             logger.info("Ejecutando triangulación 3D...")
             
@@ -618,19 +583,8 @@ class GaitAnalysis3D:
                     for cam_id, error in errors_full_ba.items():
                         print(f"  {cam_id}: {error:.2f} píxeles")
                     
-                    # Diagnósticos de cámara
-                    print(f"\n--- Diagnósticos de Cámara (Full Bundle Adjustment) ---")
-                    for cam_id, cam in cameras_full_ba.items():
-                        if cam_id != "camera0":  # camera0 es referencia
-                            diagnostics = self.get_camera_diagnostics(cam, cameras_full_ba["camera0"])
-                            print(f"\n{cam_id}:")
-                            print(f"  Baseline: {diagnostics['baseline']:.3f}m")
-                            print(f"  Ángulos de rotación: {diagnostics['rotation_angles']}")
-                            print(f"  Traslación: {diagnostics['translation']}")
-                    
-                    # Mostrar cambios en las cámaras
-                    print(f"\n--- Cambios en Parámetros de Cámara ---")
-                    print_camera_changes(cameras_rigorous, cameras_full_ba)
+                    # Mostrar matrices optimizadas por Full Bundle Adjustment
+                    print_extrinsic_matrices_bundle(cameras_full_ba, "PARÁMETROS EXTRÍNSECOS OPTIMIZADOS - FULL BUNDLE ADJUSTMENT")
                     
                     # COMPARACIÓN COMPLETA
                     print(f"\n{'='*60}")
@@ -702,9 +656,9 @@ class GaitAnalysis3D:
 
 
 def main():
-    patient_id = "patient57"
-    session_id = "session57"
-    chunk_id = 3
+    patient_id = 57
+    session_id = 57
+    chunk_id = 6
     frame_id = 44
     
     # Crear analizador y ejecutar
