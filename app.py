@@ -219,7 +219,8 @@ def end_session():
         session_id = current_session['session_id']
         
         # Registrar finalización de sesión y obtener max_chunk
-        max_chunk = ensemble_processor.register_session_end(patient_id, session_id)
+
+        max_chunk = ensemble_processor.get_max_chunk(patient_id, session_id)
         
         logger.info(f"Sesión finalizada normalmente - Paciente: {patient_id}, Sesión: {session_id}, Max chunk: {max_chunk}")
         
@@ -433,10 +434,10 @@ def receive_chunk():
             logger.info(f"Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
             
             # Registrar finalización del chunk en ensemble processor. Cuando se haya procesado el último chunk de todas las cámaras, se iniciará automáticamente el ensemble.
-            chunk_completed = ensemble_processor.register_chunk_completion(
+            chunks_completed = ensemble_processor.register_chunk_completion(
                 patient_id, session_id, f"camera{camera_id}", chunk_number
             )
-            if chunk_completed:
+            if chunks_completed:
                 logger.info(f"¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
 
         response_data = {
