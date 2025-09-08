@@ -11,10 +11,9 @@ if str(_ROOT) not in sys.path:
 
 from camera import Camera
 from triangulation_svd import triangulate_frame_svd
-from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
+# from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
 from reprojection import reprojection_error
 from calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
-from config.camera_intrinsics import CAMERA_INTRINSICS
 from full_bundle_adjustment import full_bundle_adjustment, print_extrinsic_matrices_bundle
 from backend.tests.reconstruccion_2D import load_ensemble_keypoints
 
@@ -28,13 +27,14 @@ class GaitAnalysis3D:
     
     # Constantes
     CONFIDENCE_THRESHOLD = 0.5
-    FOREARM_REFERENCE_CM = 30.0  # 30 cm como referencia
+    HEIGHT_REFERENCE_CM = 155.0  # Altura menos 15 cm como referencia
 
-    def __init__(self, patient_id: str, session_id: str, chunk_id: int, frame_id: int):
+    def __init__(self, patient_id: str, session_id: str, chunk_id: int, frame_id: int, person_height_cm: float = 190.0):
         self.patient_id = patient_id
         self.session_id = session_id
         self.chunk_id = chunk_id
         self.frame_id = frame_id
+        self.person_height_cm = person_height_cm
         # Cargar datos reales desde archivos .npy
         self._load_keypoints_data()
 
@@ -141,11 +141,12 @@ class GaitAnalysis3D:
         """Calcula distancia euclidiana entre dos puntos 2D."""
         return np.linalg.norm(point1 - point2)
 
-    def calculate_scale_factor_from_2d_forearm(self, valid_mask: np.ndarray, real_forearm_length_cm: float = 30.0) -> Dict[str, float]:
-        """Calcula factor de escala para cada cámara basado en la longitud del antebrazo en 2D."""
+    def calculate_scale_factor_from_2d_height(self, valid_mask: np.ndarray) -> Dict[str, float]:
+        """Calcula factor de escala para cada cámara basado en la altura de la persona (nariz a tobillos)."""
         
-        # Índices: 7=Codo_izq, 8=Codo_der, 9=Muñeca_izq, 10=Muñeca_der
+        # Índices: 0=Nariz, 15=Tobillo_izq, 16=Tobillo_der
         scale_factors = {}
+        target_distance_cm = self.person_height_cm - 15.0  # Altura menos 15cm
         
         cameras_data = {
             "camera0": self.coordinates_camera_0,
@@ -153,35 +154,35 @@ class GaitAnalysis3D:
             "camera2": self.coordinates_camera_2
         }
         
-        print(f"\n=== CÁLCULO DE FACTORES DE ESCALA 2D (ANTEBRAZO = {real_forearm_length_cm} cm)")
+        print(f"\n=== CÁLCULO DE FACTORES DE ESCALA 2D (ALTURA = {self.person_height_cm} cm, TARGET = {target_distance_cm:.1f} cm)")
         
         for cam_name, coords in cameras_data.items():
-            forearm_measurements = []
+            height_measurements = []
             
-            # Antebrazo izquierdo (codo_izq a muñeca_izq)
-            if valid_mask[7] and valid_mask[9]:  # Codo_izq y Muñeca_izq válidos
-                left_forearm_2d = self.calculate_2d_distance(coords[7], coords[9])
-                forearm_measurements.append(("Izquierdo", left_forearm_2d))
+            # Distancia nariz a tobillo izquierdo
+            if valid_mask[0] and valid_mask[15]:  # Nariz y Tobillo_izq válidos
+                nose_to_left_ankle = self.calculate_2d_distance(coords[0], coords[15])
+                height_measurements.append(("Nariz-Tobillo izq", nose_to_left_ankle))
             
-            # Antebrazo derecho (codo_der a muñeca_der)
-            if valid_mask[8] and valid_mask[10]:  # Codo_der y Muñeca_der válidos
-                right_forearm_2d = self.calculate_2d_distance(coords[8], coords[10])
-                forearm_measurements.append(("Derecho", right_forearm_2d))
+            # Distancia nariz a tobillo derecho
+            if valid_mask[0] and valid_mask[16]:  # Nariz y Tobillo_der válidos
+                nose_to_right_ankle = self.calculate_2d_distance(coords[0], coords[16])
+                height_measurements.append(("Nariz-Tobillo der", nose_to_right_ankle))
             
-            if forearm_measurements:
+            if height_measurements:
                 # Usar promedio de las medidas disponibles
-                avg_forearm_pixels = np.mean([pixels for _, pixels in forearm_measurements])
-                scale_factor = real_forearm_length_cm / avg_forearm_pixels  # cm/pixel
+                avg_height_pixels = np.mean([pixels for _, pixels in height_measurements])
+                scale_factor = target_distance_cm / avg_height_pixels  # cm/pixel
                 scale_factors[cam_name] = scale_factor
                 
                 print(f"\n{cam_name}:")
-                for side, pixels in forearm_measurements:
-                    print(f"  Antebrazo {side}: {pixels:.1f} píxeles")
-                print(f"  Promedio: {avg_forearm_pixels:.1f} píxeles")
+                for measurement_name, pixels in height_measurements:
+                    print(f"  {measurement_name}: {pixels:.1f} píxeles")
+                print(f"  Promedio: {avg_height_pixels:.1f} píxeles")
                 print(f"  Factor de escala: {scale_factor:.4f} cm/pixel")
             else:
                 scale_factors[cam_name] = None
-                print(f"\n{cam_name}: No se pueden medir antebrazos (puntos no válidos)")
+                print(f"\n{cam_name}: No se pueden medir distancias nariz-tobillos (puntos no válidos)")
         
         return scale_factors
 
@@ -307,39 +308,40 @@ class GaitAnalysis3D:
     # ANÁLISIS 3D
     #===============
     
-    def calculate_scale_factor_from_forearm(self, points_3d: np.ndarray, real_forearm_length_cm: float = 30.0):
-        """Calcula el factor de escala basado en la longitud real del antebrazo"""
+    def calculate_scale_factor_from_height(self, points_3d: np.ndarray):
+        """Calcula el factor de escala basado en la altura de la persona (nariz a tobillos)"""
         
-        # Índices para codo y muñeca (derecha e izquierda)
-        # 7: Codo_izq, 8: Codo_der, 9: Muñeca_izq, 10: Muñeca_der
-        forearm_measurements = []
+        # Índices: 0=Nariz, 15=Tobillo_izq, 16=Tobillo_der
+        target_distance_cm = self.person_height_cm - 15.0  # Altura menos 15cm
+        height_measurements = []
         
-        # Antebrazo izquierdo (codo_izq a muñeca_izq)
-        if not np.isnan(points_3d[7, 0]) and not np.isnan(points_3d[9, 0]):
-            left_forearm = np.linalg.norm(points_3d[7] - points_3d[9])
-            forearm_measurements.append(("Antebrazo izquierdo", left_forearm))
+        # Distancia nariz a tobillo izquierdo
+        if not np.isnan(points_3d[0, 0]) and not np.isnan(points_3d[15, 0]):
+            nose_to_left_ankle = np.linalg.norm(points_3d[0] - points_3d[15])
+            height_measurements.append(("Nariz-Tobillo izquierdo", nose_to_left_ankle))
         
-        # Antebrazo derecho (codo_der a muñeca_der)
-        if not np.isnan(points_3d[8, 0]) and not np.isnan(points_3d[10, 0]):
-            right_forearm = np.linalg.norm(points_3d[8] - points_3d[10])
-            forearm_measurements.append(("Antebrazo derecho", right_forearm))
+        # Distancia nariz a tobillo derecho
+        if not np.isnan(points_3d[0, 0]) and not np.isnan(points_3d[16, 0]):
+            nose_to_right_ankle = np.linalg.norm(points_3d[0] - points_3d[16])
+            height_measurements.append(("Nariz-Tobillo derecho", nose_to_right_ankle))
         
-        if not forearm_measurements:
-            print("ERROR: No se pueden calcular medidas de antebrazo")
+        if not height_measurements:
+            print("ERROR: No se pueden calcular medidas nariz-tobillos")
             return None
         
         # Usar el promedio de las medidas disponibles
-        avg_forearm_length_m = np.mean([length for _, length in forearm_measurements])
-        real_forearm_length_m = real_forearm_length_cm / 100.0  # convertir a metros
+        avg_height_distance_m = np.mean([distance for _, distance in height_measurements])
+        target_distance_m = target_distance_cm / 100.0  # convertir a metros
         
         # Factor de escala
-        scale_factor = real_forearm_length_m / avg_forearm_length_m
+        scale_factor = target_distance_m / avg_height_distance_m
         
-        print(f"\n=== CÁLCULO DE FACTOR DE ESCALA (BASADO EN ANTEBRAZO)")
-        print(f"Longitud real del antebrazo: {real_forearm_length_cm:.1f} cm")
-        for name, length in forearm_measurements:
-            print(f"{name}: {length*100:.1f} cm (3D estimado)")
-        print(f"Longitud promedio estimada: {avg_forearm_length_m*100:.1f} cm")
+        print(f"\n=== CÁLCULO DE FACTOR DE ESCALA (BASADO EN ALTURA)")
+        print(f"Altura de la persona: {self.person_height_cm:.1f} cm")
+        print(f"Distancia objetivo (altura - 15cm): {target_distance_cm:.1f} cm")
+        for name, distance in height_measurements:
+            print(f"{name}: {distance*100:.1f} cm (3D estimado)")
+        print(f"Distancia promedio estimada: {avg_height_distance_m*100:.1f} cm")
         print(f"Factor de escala calculado: {scale_factor:.4f}")
         
         return scale_factor
@@ -355,10 +357,106 @@ class GaitAnalysis3D:
                 return np.nan
             return np.linalg.norm(scaled_points[p1_idx] - scaled_points[p2_idx]) * 100  # convertir a cm
         
+        def calculate_knee_angle(hip_idx: int, knee_idx: int, ankle_idx: int) -> float:
+            """Calcula el ángulo de doblez de la rodilla en grados"""
+            if (np.isnan(scaled_points[hip_idx, 0]) or 
+                np.isnan(scaled_points[knee_idx, 0]) or 
+                np.isnan(scaled_points[ankle_idx, 0])):
+                return np.nan
+            
+            # Vectores: cadera->rodilla y rodilla->tobillo
+            vec_hip_knee = scaled_points[knee_idx] - scaled_points[hip_idx]
+            vec_knee_ankle = scaled_points[ankle_idx] - scaled_points[knee_idx]
+            
+            # Calcular ángulo entre vectores
+            cos_angle = np.dot(vec_hip_knee, vec_knee_ankle) / (
+                np.linalg.norm(vec_hip_knee) * np.linalg.norm(vec_knee_ankle)
+            )
+            
+            # Asegurar que cos_angle esté en el rango válido [-1, 1]
+            cos_angle = np.clip(cos_angle, -1.0, 1.0)
+            
+            # Ángulo en radianes y luego a grados
+            angle_rad = np.arccos(cos_angle)
+            angle_deg = np.degrees(angle_rad)
+            
+            # El ángulo de doblez es 180° - ángulo entre vectores
+            knee_bend_angle = 180.0 - angle_deg
+            
+            return knee_bend_angle
+        
         print(f"\n{'='*70}")
         print(f"ANÁLISIS DE MEDIDAS CORPORALES ESCALADAS ({method_name})")
-        print(f"Referencia: Antebrazo = 30.0 cm, Factor de escala: {scale_factor:.4f}")
+        print(f"Referencia: Altura = {self.person_height_cm} cm (nariz-tobillos = {self.person_height_cm - 15} cm), Factor de escala: {scale_factor:.4f}")
         print(f"{'='*70}")
+
+        # ÁNGULOS DE DOBLEZ DE RODILLAS
+        print(f"\n{'='*50}")
+        print("ÁNGULOS DE DOBLEZ DE RODILLAS")
+        print(f"{'='*50}")
+        
+        # Calcular ángulos de rodillas (índices: 11=cadera_izq, 13=rodilla_izq, 15=tobillo_izq, 12=cadera_der, 14=rodilla_der, 16=tobillo_der)
+        left_knee_angle = calculate_knee_angle(11, 13, 15)  # cadera_izq -> rodilla_izq -> tobillo_izq
+        right_knee_angle = calculate_knee_angle(12, 14, 16)  # cadera_der -> rodilla_der -> tobillo_der
+        
+        print(f"{'Articulación':<20} | {'Ángulo de Doblez':<15} | {'Estado'}")
+        print("-" * 50)
+        
+        # Rodilla izquierda
+        if np.isnan(left_knee_angle):
+            left_status = "N/A"
+            left_angle_str = "N/A"
+        else:
+            left_angle_str = f"{left_knee_angle:.1f}°"
+            if 0 <= left_knee_angle <= 10:
+                left_status = "Recta"
+            elif 10 < left_knee_angle <= 30:
+                left_status = "Poco doblada"
+            elif 30 < left_knee_angle <= 90:
+                left_status = "Doblada"
+            elif 90 < left_knee_angle <= 140:
+                left_status = "Muy doblada"
+            else:
+                left_status = "Extrema"
+        
+        print(f"{'Rodilla izquierda':<20} | {left_angle_str:<15} | {left_status}")
+        
+        # Rodilla derecha
+        if np.isnan(right_knee_angle):
+            right_status = "N/A"
+            right_angle_str = "N/A"
+        else:
+            right_angle_str = f"{right_knee_angle:.1f}°"
+            if 0 <= right_knee_angle <= 10:
+                right_status = "Recta"
+            elif 10 < right_knee_angle <= 30:
+                right_status = "Poco doblada"
+            elif 30 < right_knee_angle <= 90:
+                right_status = "Doblada"
+            elif 90 < right_knee_angle <= 140:
+                right_status = "Muy doblada"
+            else:
+                right_status = "Extrema"
+        
+        print(f"{'Rodilla derecha':<20} | {right_angle_str:<15} | {right_status}")
+        
+        # Comparación entre rodillas
+        if not np.isnan(left_knee_angle) and not np.isnan(right_knee_angle):
+            angle_diff = abs(left_knee_angle - right_knee_angle)
+            print(f"\nDiferencia entre rodillas: {angle_diff:.1f}°")
+            if angle_diff <= 5:
+                print("Simetría: Excelente (≤5°)")
+            elif angle_diff <= 10:
+                print("Simetría: Buena (≤10°)")
+            elif angle_diff <= 15:
+                print("Simetría: Regular (≤15°)")
+            else:
+                print("Simetría: Asimétrica (>15°)")
+
+        # MEDIDAS CORPORALES
+        print(f"\n{'='*50}")
+        print("MEDIDAS CORPORALES")
+        print(f"{'='*50}")
 
         # Medidas principales del cuerpo
         measurements = []
@@ -470,7 +568,7 @@ class GaitAnalysis3D:
         logger.info(f"Iniciando análisis completo para patient{self.patient_id}/session{self.session_id}/chunk_{self.chunk_id}/frame_{self.frame_id}")
 
         print("=== ANÁLISIS DE MEDIDAS CORPORALES 2D")
-        print("Basado en keypoints 2D con antebrazo de referencia = 30.0 cm")
+        print(f"Basado en keypoints 2D con altura de referencia = {self.person_height_cm} cm")
         print()
         
         # PARTE 1: ANÁLISIS 2D
@@ -478,8 +576,8 @@ class GaitAnalysis3D:
         # Filtrar keypoints válidos
         valid_mask = self.filter_valid_keypoints(confidence_threshold=self.CONFIDENCE_THRESHOLD)
         
-        # Calcular factores de escala por cámara
-        scale_factors = self.calculate_scale_factor_from_2d_forearm(valid_mask, real_forearm_length_cm=30.0)
+        # Calcular factores de escala por cámara basado en altura
+        scale_factors = self.calculate_scale_factor_from_2d_height(valid_mask)
         
         # Análisis de medidas corporales por cámara
         self.analyze_2d_body_measurements(valid_mask, scale_factors)
@@ -502,6 +600,8 @@ class GaitAnalysis3D:
             cameras_rigorous = estimate_extrinsics(
                 cameras, frame_keypoints, self.CONFIDENCE_THRESHOLD
             )
+
+            # print(f"\nCÁMARAS CONFIGURADAS (RIGUROSO): {cameras_rigorous}\n")
             
             # Mostrar matrices de parámetros extrínsecos estimados
             print_extrinsic_matrices(cameras_rigorous, "PARÁMETROS EXTRÍNSECOS ESTIMADOS")
@@ -523,6 +623,7 @@ class GaitAnalysis3D:
             for cam_id, error in errors_svd.items():
                 print(f"  {cam_id}: {error:.2f} píxeles")
             
+            '''
             # PARTE 2: Bundle Adjustment
             print(f"\n{'='*50}")
             print("PARTE 2: BUNDLE ADJUSTMENT (Refinamiento)")
@@ -560,6 +661,7 @@ class GaitAnalysis3D:
             else:
                 print("ERROR: No hay puntos válidos de SVD para refinar con Bundle Adjustment")
                 points_3d_ba = points_3d_svd
+            '''
             
             # PARTE 3: Full Bundle Adjustment
             print(f"\n{'='*50}")
@@ -588,33 +690,33 @@ class GaitAnalysis3D:
                     
                     # COMPARACIÓN COMPLETA
                     print(f"\n{'='*60}")
-                    print("COMPARACIÓN SVD vs BA vs FULL BA")
+                    print("COMPARACIÓN SVD vs FULL BA")
                     print(f"{'='*60}")
                     
                     print("Mejora en errores de reproyección:")
                     for cam_id in errors_svd.keys():
                         svd_error = errors_svd[cam_id]
-                        ba_error = errors_ba[cam_id]
+                        # ba_error = errors_ba[cam_id]
                         full_ba_error = errors_full_ba[cam_id]
                         
-                        ba_improvement = svd_error - ba_error
+                        # ba_improvement = svd_error - ba_error
                         full_ba_improvement = svd_error - full_ba_error
                         
                         print(f"  {cam_id}:")
                         print(f"    SVD: {svd_error:.2f} px")
-                        print(f"    BA:  {ba_error:.2f} px ({ba_improvement:+.2f})")
+                        # print(f"    BA:  {ba_error:.2f} px ({ba_improvement:+.2f})")
                         print(f"    Full BA: {full_ba_error:.2f} px ({full_ba_improvement:+.2f})")
                     
                     avg_error_svd = np.mean(list(errors_svd.values()))
-                    avg_error_ba = np.mean(list(errors_ba.values()))
+                    # avg_error_ba = np.mean(list(errors_ba.values()))
                     avg_error_full_ba = np.mean(list(errors_full_ba.values()))
-                    
-                    ba_total_improvement = avg_error_svd - avg_error_ba
+
+                    # ba_total_improvement = avg_error_svd - avg_error_ba
                     full_ba_total_improvement = avg_error_svd - avg_error_full_ba
                     
                     print(f"\nError promedio:")
                     print(f"  SVD: {avg_error_svd:.2f} px")
-                    print(f"  BA:  {avg_error_ba:.2f} px ({ba_total_improvement:+.2f})")
+                    # print(f"  BA:  {avg_error_ba:.2f} px ({ba_total_improvement:+.2f})")
                     print(f"  Full BA: {avg_error_full_ba:.2f} px ({full_ba_total_improvement:+.2f})")
                     
                 except Exception as e:
@@ -622,25 +724,25 @@ class GaitAnalysis3D:
                     print(f"ERROR en Full Bundle Adjustment: {e}")
                     # Usar los resultados de BA normal como fallback
                     cameras_full_ba = cameras_rigorous
-                    points_3d_full_ba = points_3d_ba
+                    # points_3d_full_ba = points_3d_ba
             else:
                 print("ERROR: No hay puntos válidos de SVD para Full Bundle Adjustment")
                 cameras_full_ba = cameras_rigorous
                 points_3d_full_ba = points_3d_svd
             
-            logger.info(f"Triangulación completada - SVD: {len(points_3d_svd)} puntos, BA: {len(points_3d_ba)} puntos, Full BA: {len(points_3d_full_ba)} puntos")
+            # logger.info(f"Triangulación completada - SVD: {len(points_3d_svd)} puntos, BA: {len(points_3d_ba)} puntos, Full BA: {len(points_3d_full_ba)} puntos")
             
             # ANÁLISIS DE MEDIDAS CORPORALES ESCALADAS
             
             methods_data = [
                 ("SVD", points_3d_svd), 
-                ("Bundle_Adjustment", points_3d_ba),
+                # ("Bundle_Adjustment", points_3d_ba),
                 ("Full_Bundle_Adjustment", points_3d_full_ba)
             ]
             
             for method_name, points_3d in methods_data:
-                # Calcular factor de escala basado en antebrazo
-                scale_factor = self.calculate_scale_factor_from_forearm(points_3d, 30.0)
+                # Calcular factor de escala basado en altura
+                scale_factor = self.calculate_scale_factor_from_height(points_3d)
                 
                 if scale_factor is not None:
                     # Análisis con escala corregida
@@ -660,9 +762,10 @@ def main():
     session_id = 57
     chunk_id = 6
     frame_id = 44
+    person_height_cm = 190.0  # Altura de la persona en centímetros
     
     # Crear analizador y ejecutar
-    analyzer = GaitAnalysis3D(patient_id, session_id, chunk_id, frame_id)
+    analyzer = GaitAnalysis3D(patient_id, session_id, chunk_id, frame_id, person_height_cm)
     analyzer.run_full_analysis()
 
 

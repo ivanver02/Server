@@ -172,7 +172,7 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 
 ### Flujo de trabajo
 - Al iniciar la grabación, se registra la sesión con `register_session_start`.
-- Al finalizar, se calcula el máximo id de chunk con `register_session_end`.
+- Al finalizar, se calcula el máximo id de chunk con `get_max_chunk`.
 - Al procesar un chunk, se ejecuta `ensemble_processor.register_chunk_completion`, que inicia el ensembling de forma asíncrona cuando todas las cámaras han procesado el último chunk.
 - El ensembling se realiza con `process_session_ensemble`, que delega el procesamiento de cada chunk y cámara a `_process_chunk_ensemble`.
 - `_get_all_frame_files` obtiene los datos de los detectores en la estructura adecuada.

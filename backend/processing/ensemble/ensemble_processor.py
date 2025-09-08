@@ -8,6 +8,7 @@ import logging
 from backend.processing.detectors.vitpose import VitPoseDetector
 from backend.processing.detectors.csp import CSPDetector
 from backend.processing.detectors.hrnet import HRNetDetector
+from backend.processing.reconstruction.perform_reconstruction import start_3d_reconstruction
 
 # Importar configuración de ensemble
 from config.settings import ensemble_config
@@ -90,10 +91,10 @@ class EnsembleProcessor:
         
         logger.info(f"Sesión registrada: patient_id={patient_id}, session_id={session_id}, cameras_count={cameras_count}")
 
-    def register_session_end(self, patient_id: str, session_id: str) -> int:
-        """Registra el final de una sesión y determina el max_chunk"""
+    def get_max_chunk(self, patient_id: str, session_id: str) -> int:
+        """Obtiene el chunk máximo de una sesión"""
         if patient_id not in self.active_sessions or session_id not in self.active_sessions[patient_id]:
-            logger.warning(f"Sesión no encontrada para finalizar: patient_id={patient_id}, session_id={session_id}")
+            logger.warning(f"Sesión no encontrada para obtener max_chunk: patient_id={patient_id}, session_id={session_id}")
             return -1
         
         # Buscar el chunk máximo recibido
@@ -113,7 +114,6 @@ class EnsembleProcessor:
                             continue
         
         self.active_sessions[patient_id][session_id]['max_chunk'] = max_chunk
-        logger.info(f"Sesión finalizada: patient_id={patient_id}, session_id={session_id}, max_chunk={max_chunk}")
         
         return max_chunk
 
@@ -158,6 +158,20 @@ class EnsembleProcessor:
                 del self.active_sessions[patient_id][session_id]
                 if not self.active_sessions[patient_id]:
                     del self.active_sessions[patient_id]
+
+            # AQUÍ SE COMENZARÍA LA RECONSTRUCCIÓN 3D
+            # Importar e iniciar reconstrucción 3D
+            try:
+                # Altura por defecto, se podría configurar por paciente
+                person_height_cm = 190.0  # TODO: Obtener altura real del paciente
+                
+                logger.info(f"Iniciando reconstrucción 3D para patient{patient_id}/session{session_id}")
+                start_3d_reconstruction(patient_id, session_id, max_chunk, person_height_cm)
+                
+            except Exception as reconstruction_error:
+                logger.error(f"Error en reconstrucción 3D: {reconstruction_error}")
+                # No fallar completamente si la reconstrucción 3D falla
+                pass
                     
         except Exception as e:
             logger.error(f"Error en ensemble asíncrono: {e}")
