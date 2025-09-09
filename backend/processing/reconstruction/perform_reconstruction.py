@@ -14,7 +14,7 @@ if str(_ROOT) not in sys.path:
 from camera import Camera
 from triangulation_svd import triangulate_frame_svd
 from calculate_extrinsics import estimate_extrinsics
-from full_bundle_adjustment import full_bundle_adjustment
+from bundle_adjustment import bundle_adjustment
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -303,9 +303,9 @@ def reconstruct_frame_with_extrinsics(cameras: Dict[str, Camera], frame_keypoint
     try:
         # Triangular inicial con SVD
         points_3d_svd = triangulate_frame_svd(cameras, frame_keypoints, CONFIDENCE_THRESHOLD)
-        
-        # Aplicar Full Bundle Adjustment
-        points_3d_full_ba, _ = full_bundle_adjustment(
+
+        # Aplicar Bundle Adjustment
+        points_3d_full_ba, _ = bundle_adjustment(
             points_3d_svd, cameras, frame_keypoints, 
             confidence_threshold=CONFIDENCE_THRESHOLD
         )

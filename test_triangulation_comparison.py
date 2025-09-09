@@ -12,7 +12,7 @@ if str(_ROOT) not in sys.path:
 from camera import Camera
 from triangulation_svd import triangulate_frame_svd
 from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
-from full_bundle_adjustment import full_bundle_adjustment
+from bundle_adjustment import bundle_adjustment
 from config.camera_intrinsics import CAMERA_INTRINSICS
 
 # Configurar logging
@@ -274,7 +274,7 @@ def main():
             if results["SVD_Triangulation"] is not None:
                 # Usar puntos SVD sin escalar para Full BA
                 points_3d_svd_unscaled = triangulate_frame_svd(cameras, frame_keypoints, CONFIDENCE_THRESHOLD)
-                points_3d_full_ba, cameras_optimized = full_bundle_adjustment(
+                points_3d_full_ba, cameras_optimized = bundle_adjustment(
                     points_3d_svd_unscaled, cameras, frame_keypoints, 
                     confidence_threshold=CONFIDENCE_THRESHOLD
                 )
@@ -284,15 +284,15 @@ def main():
                 if scale_factor:
                     points_3d_full_ba = points_3d_full_ba * scale_factor
                 
-                results["Full_Bundle_Adjustment"] = points_3d_full_ba
-                print("✓ Full Bundle Adjustment completado")
+                results["Bundle_Adjustment"] = points_3d_full_ba
+                print("Bundle Adjustment completado")
             else:
-                results["Full_Bundle_Adjustment"] = None
-                print("✗ Full Bundle Adjustment omitido (SVD falló)")
+                results["Bundle_Adjustment"] = None
+                print("✗ Bundle Adjustment omitido (SVD falló)")
         except Exception as e:
-            logger.error(f"Error en Full Bundle Adjustment: {e}")
-            results["Full_Bundle_Adjustment"] = None
-        
+            logger.error(f"Error en Bundle Adjustment: {e}")
+            results["Bundle_Adjustment"] = None
+
         # 4. Filtrar resultados válidos y realizar comparación
         valid_results = {k: v for k, v in results.items() if v is not None}
         method_names = list(valid_results.keys())

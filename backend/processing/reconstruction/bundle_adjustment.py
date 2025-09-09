@@ -148,7 +148,7 @@ def bundle_adjustment_residual(params: np.ndarray, cameras: Dict,
     
     return np.array(residuals)
 
-def full_bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
+def bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
                           frame_keypoints: Dict, confidence_threshold: float = 0.5,
                           reference_camera: str = "camera0") -> Tuple[np.ndarray, Dict]:
     """
