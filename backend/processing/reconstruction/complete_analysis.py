@@ -9,10 +9,10 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.append(str(_ROOT))
 
-from camera import Camera
-from triangulation_svd import triangulate_frame_svd
+from .camera import Camera
+from .triangulation_svd import triangulate_frame_svd
 # from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
-from reprojection import reprojection_error
+from .reprojection import reprojection_error
 from calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
 from bundle_adjustment import bundle_adjustment, print_extrinsic_matrices_bundle
 from backend.tests.reconstruccion_2D import load_ensemble_keypoints

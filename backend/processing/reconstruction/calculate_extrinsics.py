@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Dict, Tuple, List
-from camera import Camera
+from .camera import Camera
 
 
 def estimate_fundamental_matrix_ransac(pts1: np.ndarray, pts2: np.ndarray, iterations: int = 1000) -> Tuple[np.ndarray, np.ndarray]:
