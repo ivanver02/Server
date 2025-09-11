@@ -81,6 +81,69 @@ class DataConfig:
 
 @dataclass
 class MMPoseConfig:
+    """Configuración para modelos MMPose usando URLs directas"""
+    models_dir: Path = BASE_DIR / "mmpose_models"
+    configs_dir: Path = models_dir / "configs"
+    checkpoints_dir: Path = models_dir / "checkpoints"
+    
+    # Configuraciones específicas de cada detector con URLs directas
+    vitpose: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-m_simcc-aic-coco_pt-aic-coco_420e-256x192-63eb25f7_20230126.py',
+        'pose2d_weights': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-m_simcc-aic-coco_pt-aic-coco_420e-256x192-63eb25f7_20230126.pth',
+        'device': 'cuda:0'
+    })
+    
+    mspn: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/mspn/mspn50_coco_256x192-8fbfb5d0_20201123.py',
+        'pose2d_weights': 'https://download.openmmlab.com/mmpose/top_down/mspn/mspn50_coco_256x192-8fbfb5d0_20201123.pth',
+        'device': 'cuda:0'
+    })
+    
+    hrnet: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_256x192-b9e0b3ab_20200708.py',
+        'pose2d_weights': 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_256x192-b9e0b3ab_20200708.pth',
+        'device': 'cuda:0'
+    })
+    
+    csp: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-s_simcc-aic-coco_pt-aic-coco_420e-256x192-fcb2599b_20230126.py',
+        'pose2d_weights': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-s_simcc-aic-coco_pt-aic-coco_420e-256x192-fcb2599b_20230126.pth',
+        'device': 'cuda:0'
+    })
+    
+    def ensure_directories(self):
+        """Crear directorios para modelos"""
+        self.models_dir.mkdir(parents=True, exist_ok=True)
+        self.configs_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+@dataclass
+class ProcessingConfig:
+    """Configuración para procesamiento de video"""
+    # Configuración de videos anotados
+    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
+
+@dataclass
+class EnsembleConfig:
+    """Configuración para procesamiento de ensemble"""    
+    # Número mínimo de detectores requeridos para generar ensemble
+    min_detectors_required: int = 1
+
+# Instancias globales de configuración
+server_config = ServerConfig()
+gpu_config = GPUConfig()
+processing_config = ProcessingConfig()
+ensemble_config = EnsembleConfig()
+data_config = DataConfig()
+mmpose_config = MMPoseConfig()
+
+# Inicializar directorios al importar
+data_config.ensure_directories()
+mmpose_config.ensure_directories()
+
+'''
+@dataclass
+class MMPoseConfig:
     """Configuración para modelos MMPose"""
     models_dir: Path = BASE_DIR / "mmpose_models"
     configs_dir: Path = models_dir / "configs"
@@ -116,27 +179,4 @@ class MMPoseConfig:
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.configs_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
-
-@dataclass
-class ProcessingConfig:
-    """Configuración para procesamiento de video"""
-    # Configuración de videos anotados
-    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
-
-@dataclass
-class EnsembleConfig:
-    """Configuración para procesamiento de ensemble"""    
-    # Número mínimo de detectores requeridos para generar ensemble
-    min_detectors_required: int = 1
-
-# Instancias globales de configuración
-server_config = ServerConfig()
-gpu_config = GPUConfig()
-processing_config = ProcessingConfig()
-ensemble_config = EnsembleConfig()
-data_config = DataConfig()
-mmpose_config = MMPoseConfig()
-
-# Inicializar directorios al importar
-data_config.ensure_directories()
-mmpose_config.ensure_directories()
+'''
