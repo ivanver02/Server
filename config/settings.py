@@ -79,31 +79,36 @@ class DataConfig:
         for directory in dirs_to_create:
             directory.mkdir(parents=True, exist_ok=True)
 
+
 @dataclass
 class MMPoseConfig:
-    """Configuración para modelos MMPose usando URLs directas"""
+    """Configuración para modelos MMPose"""
     models_dir: Path = BASE_DIR / "mmpose_models"
     configs_dir: Path = models_dir / "configs"
     checkpoints_dir: Path = models_dir / "checkpoints"
     
-    # Configuraciones específicas de cada detector con URLs directas
+    # Configuraciones específicas de cada detector
     vitpose: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-m_simcc-aic-coco_pt-aic-coco_420e-256x192-63eb25f7_20230126.pth',
+        'pose2d': 'configs/pose2d/td-hm_ViTPose-large_8xb64-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/td-hm_ViTPose-large_8xb64-210e_coco-256x192-53609f55_20230314.pth',
         'device': 'cuda:0'
     })
     
     mspn: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/mspn/mspn50_coco_256x192-8fbfb5d0_20201123.pth',
+        'pose2d': 'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/4xmspn50_coco_256x192-7b837afb_20201123.pth',
         'device': 'cuda:0'
     })
     
     hrnet: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_256x192-b9e0b3ab_20200708.pth',
+        'pose2d': 'configs/pose2d/td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py',
+        'pose2d_weights': 'checkpoints/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth',
         'device': 'cuda:0'
     })
     
     csp: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-s_simcc-aic-coco_pt-aic-coco_420e-256x192-fcb2599b_20230126.pth',
+        'pose2d': 'configs/pose2d/cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py',
+        'pose2d_weights': 'checkpoints/cspnext-m_udp-coco-wholebody_pt-in1k_210e-256x192-320fa258_20230123.pth',
         'device': 'cuda:0'
     })
     
