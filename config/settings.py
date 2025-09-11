@@ -91,25 +91,25 @@ class MMPoseConfig:
     vitpose: Dict[str, str] = field(default_factory=lambda: {
         'pose2d': 'configs/pose2d/td-hm_ViTPose-large_8xb64-210e_coco-256x192.py',
         'pose2d_weights': 'checkpoints/td-hm_ViTPose-large_8xb64-210e_coco-256x192-53609f55_20230314.pth',
-        'device': 'cuda:0'
+        'device': 'cuda:1'
     })
     
     mspn: Dict[str, str] = field(default_factory=lambda: {
         'pose2d': 'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py',
         'pose2d_weights': 'checkpoints/4xmspn50_coco_256x192-7b837afb_20201123.pth',
-        'device': 'cuda:0'
+        'device': 'cuda:1'
     })
     
     hrnet: Dict[str, str] = field(default_factory=lambda: {
         'pose2d': 'configs/pose2d/td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py',
         'pose2d_weights': 'checkpoints/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth',
-        'device': 'cuda:0'
+        'device': 'cuda:1'
     })
     
     csp: Dict[str, str] = field(default_factory=lambda: {
         'pose2d': 'configs/pose2d/cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py',
         'pose2d_weights': 'checkpoints/cspnext-m_udp-coco-wholebody_pt-in1k_210e-256x192-320fa258_20230123.pth',
-        'device': 'cuda:0'
+        'device': 'cuda:1'
     })
     
     def ensure_directories(self):
