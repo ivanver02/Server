@@ -33,27 +33,21 @@ class BasePoseDetector(ABC):
         
     def initialize(self) -> bool:
         """
-        Inicializar el detector con manejo de errores usando URLs directas
+        Inicializar el detector con manejo de errores usando URL directa del checkpoint
         """
         try:
-            # Obtener URLs directas desde la configuración
+            # Obtener URL directa del checkpoint desde la configuración
             pose2d_url = self.config['pose2d']
-            pose2d_weights_url = self.config['pose2d_weights']
             
-            # Verificar que las URLs sean válidas
+            # Verificar que la URL sea válida
             if not pose2d_url.startswith('http'):
-                logger.error(f"Invalid config URL for {self.model_name}: {pose2d_url}")
-                return False
-                
-            if not pose2d_weights_url.startswith('http'):
-                logger.error(f"Invalid weights URL for {self.model_name}: {pose2d_weights_url}")
+                logger.error(f"Invalid checkpoint URL for {self.model_name}: {pose2d_url}")
                 return False
             
-            # Inicializar el inferenciador directamente con las URLs
-            logger.info(f"Initializing {self.model_name} with config URL: {pose2d_url}")
+            # Inicializar el inferenciador directamente con la URL del checkpoint
+            logger.info(f"Initializing {self.model_name} with checkpoint URL: {pose2d_url}")
             self.inferencer = MMPoseInferencer(
                 pose2d=pose2d_url,
-                pose2d_weights=pose2d_weights_url,
                 device=self.config['device']
             )
             

@@ -88,26 +88,22 @@ class MMPoseConfig:
     
     # Configuraciones específicas de cada detector con URLs directas
     vitpose: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-m_simcc-aic-coco_pt-aic-coco_420e-256x192-63eb25f7_20230126.py',
-        'pose2d_weights': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-m_simcc-aic-coco_pt-aic-coco_420e-256x192-63eb25f7_20230126.pth',
+        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-m_simcc-aic-coco_pt-aic-coco_420e-256x192-63eb25f7_20230126.pth',
         'device': 'cuda:0'
     })
     
     mspn: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/mspn/mspn50_coco_256x192-8fbfb5d0_20201123.py',
-        'pose2d_weights': 'https://download.openmmlab.com/mmpose/top_down/mspn/mspn50_coco_256x192-8fbfb5d0_20201123.pth',
+        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/mspn/mspn50_coco_256x192-8fbfb5d0_20201123.pth',
         'device': 'cuda:0'
     })
     
     hrnet: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_256x192-b9e0b3ab_20200708.py',
-        'pose2d_weights': 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_256x192-b9e0b3ab_20200708.pth',
+        'pose2d': 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_256x192-b9e0b3ab_20200708.pth',
         'device': 'cuda:0'
     })
     
     csp: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-s_simcc-aic-coco_pt-aic-coco_420e-256x192-fcb2599b_20230126.py',
-        'pose2d_weights': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-s_simcc-aic-coco_pt-aic-coco_420e-256x192-fcb2599b_20230126.pth',
+        'pose2d': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-s_simcc-aic-coco_pt-aic-coco_420e-256x192-fcb2599b_20230126.pth',
         'device': 'cuda:0'
     })
     
@@ -129,6 +125,18 @@ class EnsembleConfig:
     # Número mínimo de detectores requeridos para generar ensemble
     min_detectors_required: int = 1
 
+@dataclass
+class CodeClientConfig:
+    """Configuración para comunicarse con el proyecto 'Code' que recibe videos anotados"""
+    # IP de la máquina donde corre el proyecto Code dentro de la subred
+    host_ip: str = "172.16.187.248"
+    port: int = 5000
+    upload_endpoint: str = "/api/annotated_videos/upload"
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self.host_ip}:{self.port}"
+
 # Instancias globales de configuración
 server_config = ServerConfig()
 gpu_config = GPUConfig()
@@ -136,6 +144,7 @@ processing_config = ProcessingConfig()
 ensemble_config = EnsembleConfig()
 data_config = DataConfig()
 mmpose_config = MMPoseConfig()
+code_client_config = CodeClientConfig()
 
 # Inicializar directorios al importar
 data_config.ensure_directories()
