@@ -2,7 +2,7 @@
 
 Este proyecto es el backend para el procesamiento de video y reconstrucción 3D de keypoints, desarrollado por la Universidad de Málaga y el Hospital Costa del Sol. El sistema está diseñado para analizar la marcha humana y detectar patrones relacionados con la gonartrosis, empleando procesamiento multi-cámara, modelos de pose 2D y triangulación 3D.
 
-Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio Code, que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
+Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio Client, que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
 
 ---
 ## Descripción del proyecto
@@ -47,14 +47,37 @@ Server/
 │   │   │   ├── mspn.py
 │   │   │   ├── hrnet.py
 │   │   │   ├── csp.py
-│   │   │   └── ...
+│   │   │   └── __init__.py
+│   │   ├── reconstruction/
+│   │   │   ├── camera.py
+│   │   │   ├── calculate_extrinsics.py
+│   │   │   ├── triangulation_svd.py
+│   │   │   ├── bundle_adjustment.py
+│   │   │   ├── perform_reconstruction.py
+│   │   │   ├── reprojection.py
+│   │   │   ├── analyze_3D_keypoint.py
+│   │   │   ├── complete_analysis.py
+│   │   │   └── __init__.py
 │   │   ├── coordinator.py
-│   │   └── ...
-│   └── ...
+│   │   └── __init__.py
+│   ├── tests/
+│   │   ├── csp.py
+│   │   ├── hrnet_w48_wholebody.py
+│   │   ├── mspn.py
+│   │   ├── vitpose.py
+│   │   ├── video.py
+│   │   ├── reconstruccion_2D.py
+│   │   └── __init__.py
+│   └── __init__.py
 ├── mmpose_models/
 │   ├── configs/
-│   ├── checkpoints/
-│   └── ...
+│   │   ├── pose2d/
+│   │   │   ├── td-hm_ViTPose-large_8xb64-210e_coco-256x192.py
+│   │   │   ├── td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py
+│   │   │   ├── td-hm_4xmspn50_8xb32-210e_coco-256x192.py
+│   │   │   └── cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py
+│   │   └── default_runtime.py
+│   └── checkpoints/
 ├── data/
 │   ├── unprocessed/
 │   │   └── <paciente>/
@@ -80,9 +103,14 @@ Server/
 │   │   │   └── <paciente>/<sesion>/<camara>/<detector>/video_annotated.mp4
 │   │   └── photos_from_video/
 │   │       └── <paciente>/<sesion>/<camara>/frames/
+│   ├── logs/
 │   └── ...
+├── docs/
+│   └── main_classes.md
+├── .gitignore
 ├── LICENSE.md
-└── README.md
+├── README.md
+└── requirements.txt
 ```
 
 
@@ -104,7 +132,7 @@ pip install -r requirements.txt
 python main.py
 ```
 <div style="background-color:#fffde7; border-left:6px solid #fbc02d; padding:10px; margin-bottom:10px;">
-El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate de que el puerto esté abierto y accesible.
+El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate de que el puerto esté abierto y accesible. Si usas el sistema con el repositorio Client, verifica que la configuración del servidor en <code>Client/backend/config/settings.py</code> coincida con la IP y puerto del servidor.
 </div>
 
 
@@ -183,7 +211,7 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 ---
 ## Reconstrucción 3D
 
-El sistema implementa un pipeline completo de reconstrucción 3D de keypoints que opera en tres fases principales:
+El sistema implementa un pipeline completo de reconstrucción 3D de keypoints del que podemos destacar los siguientes apartados:
 
 ### **Flujo de Procesamiento**
 
@@ -205,16 +233,17 @@ El sistema implementa un pipeline completo de reconstrucción 3D de keypoints qu
 #### **Herramientas de Análisis (Independientes)**
 - [`reprojection.py`](backend/processing/reconstruction/reprojection.py): Calcula el error de reproyección para evaluar la calidad de la reconstrucción 3D y los parámetros de las cámaras.
 - [`analyze_3D_keypoint.py`](backend/processing/reconstruction/analyze_3D_keypoint.py): Muestra las coordenadas 3D de cada keypoint detectado y proporciona estimaciones detalladas de medidas corporales.
-- [`complete_analysis.py`](backend/processing/reconstruction/complete_analysis.py): Herramienta de análisis completo que muestra:
+- [`complete_analysis.py`](backend/processing/reconstruction/complete_analysis.py): Herramienta de análisis completo que muestra, para un paciente, sesión, chunk y frame especificados:
   - Parámetros extrínsecos de la estimación inicial y después de la optimización
   - Reconstrucciones 3D tanto de la triangulación inicial como de la versión optimizada
   - Ángulos de flexión de ambas rodillas para análisis biomecánico
   - Estimaciones de medidas corporales para cada método de reconstrucción
   - Análisis de keypoints 2D para cada cámara individual
+  - Errores de reproyección para cada cámara y método
 
 ### **Características Técnicas**
 
-- **Calibración robusta**: Estimación de extrínsecos usando múltiples frames para mayor precisión
+- **Calibración robusta**: Primera estimación de extrínsecos usando múltiples frames para mayor precisión
 - **Triangulación SVD**: Método matemáticamente robusto para la reconstrucción 3D inicial
 - **Bundle Adjustment**: Optimización iterativa que minimiza el error de reproyección global
 - **Escalado anatómico**: Normalización basada en medidas antropométricas (altura nariz-tobillo)
@@ -236,10 +265,10 @@ El sistema implementa un pipeline completo de reconstrucción 3D de keypoints qu
 ## Testing
 
 <div style="background-color:#fffde7; border-left:6px solid #fbc02d; padding:10px; margin-bottom:10px;">
-<strong>Consejo:</strong> Utiliza la carpeta de testing para prototipos y pruebas manuales antes de integrar cambios en el sistema principal.
+<strong>Consejo:</strong> Utiliza la carpeta <code>backend/tests/</code> para prototipos y pruebas manuales antes de integrar cambios en el sistema principal.
 </div>
 
-La carpeta [`testing`](testing) no está pensada para pruebas automáticas, sino como espacio para desarrollar código aislado que posteriormente se integra en el proyecto principal.
+La carpeta [`backend/tests/`](backend/tests/) no está pensada para pruebas automáticas, sino como espacio para desarrollar código aislado que posteriormente se integra en el proyecto principal.
 
 
 ---
