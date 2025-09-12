@@ -3,10 +3,16 @@
 Exporta símbolos existentes en los módulos del paquete.
 """
 
-from .camera import Camera
-from .triangulation_svd import triangulate_frame_svd
-# from .triangulation_bundle_adjustment import refine_frame_bundle_adjustment
-from .reprojection import reprojection_error
+try:
+    from .camera import Camera
+    from .triangulation_svd import triangulate_frame_svd
+    # from .triangulation_bundle_adjustment import refine_frame_bundle_adjustment
+    from .reprojection import reprojection_error
+except ImportError:
+    from camera import Camera
+    from triangulation_svd import triangulate_frame_svd
+    # from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
+    from reprojection import reprojection_error
 
 __all__ = [
     "Camera",

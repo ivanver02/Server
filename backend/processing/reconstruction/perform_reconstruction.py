@@ -11,10 +11,16 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.append(str(_ROOT))
 
-from .camera import Camera
-from .triangulation_svd import triangulate_frame_svd
-from .calculate_extrinsics import estimate_extrinsics
-from .bundle_adjustment import bundle_adjustment
+try:
+    from .camera import Camera
+    from .triangulation_svd import triangulate_frame_svd
+    from .calculate_extrinsics import estimate_extrinsics
+    from .bundle_adjustment import bundle_adjustment
+except ImportError:
+    from camera import Camera
+    from triangulation_svd import triangulate_frame_svd
+    from calculate_extrinsics import estimate_extrinsics
+    from bundle_adjustment import bundle_adjustment
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
