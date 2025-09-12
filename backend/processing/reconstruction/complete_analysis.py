@@ -9,12 +9,19 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.append(str(_ROOT))
 
-from camera import Camera
-from triangulation_svd import triangulate_frame_svd
-# from triangulation_bundle_adjustment import refine_frame_bundle_adjustment
-from reprojection import reprojection_error
-from calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
-from full_bundle_adjustment import full_bundle_adjustment, print_extrinsic_matrices_bundle
+try:
+    from camera import Camera
+    from triangulation_svd import triangulate_frame_svd
+    from reprojection import reprojection_error
+    from calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
+    from bundle_adjustment import bundle_adjustment, print_extrinsic_matrices_bundle
+except ImportError:
+    from .camera import Camera
+    from .triangulation_svd import triangulate_frame_svd
+    from .reprojection import reprojection_error
+    from .calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
+    from .bundle_adjustment import bundle_adjustment, print_extrinsic_matrices_bundle
+
 from backend.tests.reconstruccion_2D import load_ensemble_keypoints
 
 # Configurar logging
@@ -671,17 +678,17 @@ class GaitAnalysis3D:
             if svd_count > 0:
                 try:
                     # Preparar datos para full bundle adjustment
-                    points_3d_full_ba, cameras_full_ba = full_bundle_adjustment(
+                    points_3d_full_ba, cameras_full_ba = bundle_adjustment(
                         points_3d_svd, cameras_rigorous, frame_keypoints, 
                         confidence_threshold=self.CONFIDENCE_THRESHOLD
                     )
                     
                     full_ba_count = np.sum(~np.isnan(points_3d_full_ba[:, 0]))
-                    print(f"Full Bundle Adjustment: {svd_count} -> {full_ba_count} puntos válidos")
+                    print(f"Bundle Adjustment: {svd_count} -> {full_ba_count} puntos válidos")
                     
                     # Errores de reproyección con Full Bundle Adjustment
                     errors_full_ba = reprojection_error(points_3d_full_ba, cameras_full_ba, frame_keypoints)
-                    print(f"\nErrores de reproyección (Full Bundle Adjustment):")
+                    print(f"\nErrores de reproyección (Bundle Adjustment):")
                     for cam_id, error in errors_full_ba.items():
                         print(f"  {cam_id}: {error:.2f} píxeles")
                     
@@ -737,7 +744,7 @@ class GaitAnalysis3D:
             methods_data = [
                 ("SVD", points_3d_svd), 
                 # ("Bundle_Adjustment", points_3d_ba),
-                ("Full_Bundle_Adjustment", points_3d_full_ba)
+                ("Bundle_Adjustment", points_3d_full_ba)
             ]
             
             for method_name, points_3d in methods_data:

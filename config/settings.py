@@ -24,7 +24,7 @@ class GPUConfig:
     # [1] - Solo GPU 1 disponible  
     # [0, 1] - Ambas GPUs disponibles (por defecto)
     # [] - Sin GPUs (usar CPU)
-    available_gpus: list = field(default_factory=lambda: [0, 1])
+    available_gpus: list = field(default_factory=lambda: [1])
     
     # Número máximo de chunks procesándose simultáneamente
     # Se ajusta automáticamente al número de GPUs disponibles
@@ -79,6 +79,83 @@ class DataConfig:
         for directory in dirs_to_create:
             directory.mkdir(parents=True, exist_ok=True)
 
+
+@dataclass
+class MMPoseConfig:
+    """Configuración para modelos MMPose"""
+    models_dir: Path = BASE_DIR / "mmpose_models"
+    configs_dir: Path = models_dir / "configs"
+    checkpoints_dir: Path = models_dir / "checkpoints"
+    
+    # Configuraciones específicas de cada detector
+    vitpose: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'configs/pose2d/td-hm_ViTPose-large_8xb64-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/td-hm_ViTPose-large_8xb64-210e_coco-256x192-53609f55_20230314.pth',
+        'device': 'cuda:1'
+    })
+    
+    mspn: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py',
+        'pose2d_weights': 'checkpoints/4xmspn50_coco_256x192-7b837afb_20201123.pth',
+        'device': 'cuda:1'
+    })
+    
+    hrnet: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'configs/pose2d/td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py',
+        'pose2d_weights': 'checkpoints/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth',
+        'device': 'cuda:1'
+    })
+    
+    csp: Dict[str, str] = field(default_factory=lambda: {
+        'pose2d': 'configs/pose2d/cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py',
+        'pose2d_weights': 'checkpoints/cspnext-m_udp-coco-wholebody_pt-in1k_210e-256x192-320fa258_20230123.pth',
+        'device': 'cuda:1'
+    })
+    
+    def ensure_directories(self):
+        """Crear directorios para modelos"""
+        self.models_dir.mkdir(parents=True, exist_ok=True)
+        self.configs_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+@dataclass
+class ProcessingConfig:
+    """Configuración para procesamiento de video"""
+    # Configuración de videos anotados
+    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
+
+@dataclass
+class EnsembleConfig:
+    """Configuración para procesamiento de ensemble"""    
+    # Número mínimo de detectores requeridos para generar ensemble
+    min_detectors_required: int = 1
+
+@dataclass
+class CodeClientConfig:
+    """Configuración para comunicarse con el proyecto 'Code' que recibe videos anotados"""
+    # IP de la máquina donde corre el proyecto Code dentro de la subred
+    host_ip: str = "172.16.187.248"
+    port: int = 5000
+    upload_endpoint: str = "/api/annotated_videos/upload"
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self.host_ip}:{self.port}"
+
+# Instancias globales de configuración
+server_config = ServerConfig()
+gpu_config = GPUConfig()
+processing_config = ProcessingConfig()
+ensemble_config = EnsembleConfig()
+data_config = DataConfig()
+mmpose_config = MMPoseConfig()
+code_client_config = CodeClientConfig()
+
+# Inicializar directorios al importar
+data_config.ensure_directories()
+mmpose_config.ensure_directories()
+
+'''
 @dataclass
 class MMPoseConfig:
     """Configuración para modelos MMPose"""
@@ -116,27 +193,4 @@ class MMPoseConfig:
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.configs_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
-
-@dataclass
-class ProcessingConfig:
-    """Configuración para procesamiento de video"""
-    # Configuración de videos anotados
-    save_annotated_videos: bool = False  # Si guardar videos con keypoints dibujados
-
-@dataclass
-class EnsembleConfig:
-    """Configuración para procesamiento de ensemble"""    
-    # Número mínimo de detectores requeridos para generar ensemble
-    min_detectors_required: int = 1
-
-# Instancias globales de configuración
-server_config = ServerConfig()
-gpu_config = GPUConfig()
-processing_config = ProcessingConfig()
-ensemble_config = EnsembleConfig()
-data_config = DataConfig()
-mmpose_config = MMPoseConfig()
-
-# Inicializar directorios al importar
-data_config.ensure_directories()
-mmpose_config.ensure_directories()
+'''
