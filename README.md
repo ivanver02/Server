@@ -181,6 +181,51 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 
 
 ---
+## Reconstrucción 3D
+
+El sistema implementa un pipeline completo de reconstrucción 3D de keypoints que opera en tres fases principales:
+
+### **Flujo de Procesamiento**
+
+1. **Estimación de parámetros extrínsecos**: Se comienza estimando los parámetros extrínsecos de cada cámara usando correspondencias de keypoints 2D entre múltiples vistas, estableciendo la geometría espacial del sistema multi-cámara.
+
+2. **Estimación de la reconstrucción 3D**: A partir de los extrínsecos iniciales, se realiza triangulación 3D de los keypoints 2D detectados, obteniendo las coordenadas espaciales de cada punto anatómico.
+
+3. **Optimización conjunta**: Se optimizan estas estimaciones conjuntamente mediante bundle adjustment, buscando reducir el error de reproyección y refinando tanto los parámetros de las cámaras como las posiciones 3D de los keypoints.
+
+### **Archivos del Sistema**
+
+#### **Flujo Principal (Integrados)**
+- [`camera.py`](backend/processing/reconstruction/camera.py): Gestiona diversas interacciones que se realizan con la cámara, incluyendo matrices de proyección y transformaciones.
+- [`calculate_extrinsics.py`](backend/processing/reconstruction/calculate_extrinsics.py): Realiza la primera estimación de los parámetros extrínsecos usando geometría epipolar y correspondencias entre vistas.
+- [`triangulation_svd.py`](backend/processing/reconstruction/triangulation_svd.py): Implementa triangulación mediante SVD para obtener la primera reconstrucción 3D a partir de los keypoints 2D.
+- [`bundle_adjustment.py`](backend/processing/reconstruction/bundle_adjustment.py): Emplea, a partir de una estimación inicial de extrínsecos y reconstrucción 3D, un método iterativo para reducir el error de reproyección mediante optimización no lineal.
+- [`perform_reconstruction.py`](backend/processing/reconstruction/perform_reconstruction.py): Orquesta todos los pasos del pipeline de reconstrucción 3D para que sea fácilmente integrable con el flujo principal del sistema.
+
+#### **Herramientas de Análisis (Independientes)**
+- [`reprojection.py`](backend/processing/reconstruction/reprojection.py): Calcula el error de reproyección para evaluar la calidad de la reconstrucción 3D y los parámetros de las cámaras.
+- [`analyze_3D_keypoint.py`](backend/processing/reconstruction/analyze_3D_keypoint.py): Muestra las coordenadas 3D de cada keypoint detectado y proporciona estimaciones detalladas de medidas corporales.
+- [`complete_analysis.py`](backend/processing/reconstruction/complete_analysis.py): Herramienta de análisis completo que muestra:
+  - Parámetros extrínsecos de la estimación inicial y después de la optimización
+  - Reconstrucciones 3D tanto de la triangulación inicial como de la versión optimizada
+  - Ángulos de flexión de ambas rodillas para análisis biomecánico
+  - Estimaciones de medidas corporales para cada método de reconstrucción
+  - Análisis de keypoints 2D para cada cámara individual
+
+### **Características Técnicas**
+
+- **Calibración robusta**: Estimación de extrínsecos usando múltiples frames para mayor precisión
+- **Triangulación SVD**: Método matemáticamente robusto para la reconstrucción 3D inicial
+- **Bundle Adjustment**: Optimización iterativa que minimiza el error de reproyección global
+- **Escalado anatómico**: Normalización basada en medidas antropométricas (altura nariz-tobillo)
+- **Análisis biomecánico**: Cálculo automático de ángulos articulares y medidas corporales
+
+<div style="background-color:#e8f5e8; border-left:6px solid #4caf50; padding:10px; margin-bottom:10px;">
+<strong>Integración:</strong> La reconstrucción 3D se ejecuta automáticamente después del ensemble, almacenando los resultados en <code>data/processed/3D_keypoints/</code> con formato <code>{frame_id}_{chunk_id}.npy</code>.
+</div>
+
+
+---
 ## Configuraciones
 
 - Toda la configuración está centralizada en la carpeta [`config/`](config/).
