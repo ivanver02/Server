@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class EnsembleProcessor:
     """
-    Procesador de ensemble que combina detectores cuando todas las cámaras han terminado
+    Procesador de ensemble que combina detectores cuando todos los chunks de todas las cámaras han sido procesados por todos los detectores 2D.
     """
     
     def __init__(self, base_data_dir: Path):
@@ -159,11 +159,15 @@ class EnsembleProcessor:
                 if not self.active_sessions[patient_id]:
                     del self.active_sessions[patient_id]
 
-            # AQUÍ SE COMENZARÍA LA RECONSTRUCCIÓN 3D
-            # Importar e iniciar reconstrucción 3D
             try:
-                # Altura por defecto, se podría configurar por paciente
-                person_height_cm = 190.0  # TODO: Obtener altura real del paciente
+                '''
+                IMPORTANTE: Si se quiere obtener una medida absoluta del paciente
+                (como por ejemplo, la longitud de la rodilla a la cadera), se debe
+                escalar la reconstrucción 3D. Se debería de usar la altura real del paciente,
+                pidiéndola en el frontend, y adaptando el flujo a esa altura. De momento, establezco la
+                mía como valor por defecto.
+                '''
+                person_height_cm = 190.0 
                 
                 logger.info(f"Iniciando reconstrucción 3D para patient{patient_id}/session{session_id}")
                 start_3d_reconstruction(patient_id, session_id, max_chunk, person_height_cm)
@@ -178,7 +182,7 @@ class EnsembleProcessor:
 
     def process_session_ensemble(self, patient_id: str, session_id: str, max_chunk: int):
         """
-        Procesar ensemble para toda la sesión cuando todas las cámaras han terminado
+        Procesar ensemble para toda la sesión cuando todos los chunks de todas las cámaras han sido procesados por todos los detectores 2D.
         """
         try:
             logger.info(f" Iniciando ensemble para sesión completa: patient{patient_id}/session{session_id}")

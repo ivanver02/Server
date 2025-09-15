@@ -5,6 +5,11 @@ import numpy as np
 # Resolución: 640x480, FOV: 69°H x 54°V, Sensor: OV2740 CMOS 1/3"
 
 # Generar intrínsecos aleatorios basados en distribución normal
+'''
+IMPORTANTE: Cuando ya se tenga una forma de saber qué cámara tendrá cada ID (camera0, camera1, camera2),
+se deben reemplazar los valores generados aleatoriamente por los reales que devuelve el SDK de Orbbec.
+'''
+
 rng = np.random.default_rng()
 mean_fx, mean_fy = 417.1826477050781, 417.1826477050781
 mean_cx, mean_cy = 420.6875, 264.0062561035156

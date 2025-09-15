@@ -156,6 +156,8 @@ El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate
 
 - Solo puede haber una sesión de grabación activa, pero pueden procesarse varias sesiones simultáneamente.
 
+- El archivo [`backend/tests/reconstruccion_2D.py`](backend/tests/reconstruccion_2D.py) se puede emplear para visualizar la reconstrucción 2D del flujo completo, para estudiar si funciona correctamente.
+
 <div style="background-color:#ffebee; border-left:6px solid #d32f2f; padding:10px; margin-bottom:10px;">
 <strong>Advertencia:</strong> Si alguna cámara falla, es necesario reiniciar los dos servidores Flask y el switch de las cámaras.
 </div>

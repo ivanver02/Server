@@ -1,9 +1,5 @@
 from mmpose.apis import MMPoseInferencer
-import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-import os
-import pprint
 
 # Lista de nombres de keypoints COCO
 JOINT_NAMES = [
@@ -39,7 +35,6 @@ result_generator = inferencer(
     skeleton_style='mmpose',
     show=False
 )
-
 
 # 4. Itera a través de los resultados (uno por frame)
 for frame_idx, results in enumerate(result_generator):

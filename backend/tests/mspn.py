@@ -2,8 +2,6 @@ from mmpose.apis import MMPoseInferencer
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-import pprint
 
 # Lista de nombres de keypoints COCO
 JOINT_NAMES = [
@@ -17,7 +15,7 @@ JOINT_NAMES = [
 inferencer = MMPoseInferencer(
     pose2d='/home/work/Server/mmpose_models/configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py',
     pose2d_weights='/home/work/Server/mmpose_models/checkpoints/4xmspn50_coco_256x192-7b837afb_20201123.pth',
-    device='cuda:0' if True else 'cpu'                      # Usar GPU si está disponible
+    device='cuda:0' if True else 'cpu'  # Usar GPU si está disponible
 )
 
 # 2. Especificar ruta de la imagen de entrada

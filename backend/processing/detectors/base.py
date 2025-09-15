@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class BasePoseDetector(ABC):
     """
-    Clase base para todos los detectores de pose
+    Interfaz a implementar cuando se desee agregar un nuevo detector de pose
     """
     
     def __init__(self, model_name: str, config_key: str):
@@ -43,25 +43,6 @@ class BasePoseDetector(ABC):
             # Verificar si el archivo de configuración existe
             if not pose2d_path.exists():
                 logger.error(f"Config file not found: {pose2d_path}")
-                
-                '''
-                # Intentar buscar configuraciones alternativas
-                alternatives = self._find_alternative_configs()
-                if alternatives:
-                    logger.info(f"Trying alternative configs for {self.model_name}...")
-                    for alt_config in alternatives:
-                        alt_path = mmpose_config.models_dir / alt_config
-                        if alt_path.exists():
-                            logger.info(f"Using alternative config: {alt_config}")
-                            pose2d_path = alt_path
-                            break
-                    else:
-                        logger.error(f"No alternative configs found for {self.model_name}")
-                        return False
-                else:
-                    logger.error(f"No alternatives available for {self.model_name}")
-                    return False
-                '''
             
             # Verificar archivo de pesos
             if not pose2d_weights_path.exists():
@@ -185,31 +166,3 @@ class BasePoseDetector(ABC):
         
         annotated_dir.mkdir(parents=True, exist_ok=True)
         return annotated_dir
-    
-
-    '''
-    def _find_alternative_configs(self) -> list:
-        """
-        Buscar configuraciones alternativas para el detector
-        
-        Returns:
-            Lista de rutas de configuración alternativas
-        """
-        # Configuraciones alternativas basadas en archivos reales
-        alternatives = {
-            'vitpose': [
-                'configs/pose2d/td-hm_ViTPose-large_8xb64-210e_coco-256x192.py'
-            ],
-            'mspn': [
-                'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py'
-            ],
-            'hrnet': [
-                'configs/pose2d/td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py'
-            ],
-            'csp': [
-                'configs/pose2d/cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py'
-            ]
-        }
-        
-        return alternatives.get(self.model_name.lower(), [])
-    '''

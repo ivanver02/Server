@@ -132,7 +132,13 @@ class EnsembleConfig:
 
 @dataclass
 class CodeClientConfig:
-    """Configuración para comunicarse con el proyecto 'Code' que recibe videos anotados"""
+    """
+    Configuración para comunicarse con el proyecto 'Code' que recibe videos anotados
+    IMPORTANTE: en la rama Demo está implementada la comunicación de vuelta desde el servidor al cliente,
+    para enviar los vídeos ya anotados tras hacer el ensemble de keypoints 2D.
+    Teniendo eso como referencia, se puede completar esta configuración.
+    La IP del cliente varía cada vez que se conecta a la red, por lo que hay que obtenerla dinámicamente.
+    """
     # IP de la máquina donde corre el proyecto Code dentro de la subred
     host_ip: str = "172.16.187.248"
     port: int = 5000
@@ -154,43 +160,3 @@ code_client_config = CodeClientConfig()
 # Inicializar directorios al importar
 data_config.ensure_directories()
 mmpose_config.ensure_directories()
-
-'''
-@dataclass
-class MMPoseConfig:
-    """Configuración para modelos MMPose"""
-    models_dir: Path = BASE_DIR / "mmpose_models"
-    configs_dir: Path = models_dir / "configs"
-    checkpoints_dir: Path = models_dir / "checkpoints"
-    
-    # Configuraciones específicas de cada detector
-    vitpose: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'configs/pose2d/td-hm_ViTPose-large_8xb64-210e_coco-256x192.py',
-        'pose2d_weights': 'checkpoints/td-hm_ViTPose-large_8xb64-210e_coco-256x192-53609f55_20230314.pth',
-        'device': 'cuda:0'
-    })
-    
-    mspn: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'configs/pose2d/td-hm_4xmspn50_8xb32-210e_coco-256x192.py',
-        'pose2d_weights': 'checkpoints/4xmspn50_coco_256x192-7b837afb_20201123.pth',
-        'device': 'cuda:0'
-    })
-    
-    hrnet: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'configs/pose2d/td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py',
-        'pose2d_weights': 'checkpoints/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth',
-        'device': 'cuda:0'
-    })
-    
-    csp: Dict[str, str] = field(default_factory=lambda: {
-        'pose2d': 'configs/pose2d/cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py',
-        'pose2d_weights': 'checkpoints/cspnext-m_udp-coco-wholebody_pt-in1k_210e-256x192-320fa258_20230123.pth',
-        'device': 'cuda:0'
-    })
-    
-    def ensure_directories(self):
-        """Crear directorios para modelos"""
-        self.models_dir.mkdir(parents=True, exist_ok=True)
-        self.configs_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
-'''

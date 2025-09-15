@@ -232,7 +232,8 @@ def estimate_extrinsics(
 def print_extrinsic_matrices(cameras: Dict[str, Camera], title: str = "PARÁMETROS EXTRÍNSECOS"):
     """
     Muestra las matrices de parámetros extrínsecos (R, t) para todas las cámaras.
-    
+    Se emplea únicamente en complete_analysis.py para mostrar resultados.
+
     Args:
         cameras: Diccionario de cámaras con parámetros extrínsecos
         title: Título a mostrar en el encabezado

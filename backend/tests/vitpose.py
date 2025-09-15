@@ -2,8 +2,6 @@ from mmpose.apis import MMPoseInferencer
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-import pprint
 
 # Lista de nombres de keypoints COCO
 JOINT_NAMES = [
@@ -58,8 +56,7 @@ plt.scatter(xs, ys,
             alpha=0.8,         # algo de transparencia
            )
 
-
-# 6) Guardar imagen con nombre especificado
+# 5) Guardar imagen con nombre especificado
 output_path = 'atleta_vitpose.jpg'
 plt.axis('off')
 plt.title('Keypoints sobre la imagen')

@@ -26,7 +26,11 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
 logger = logging.getLogger(__name__)
 
-# Constantes
+# Constantes.
+
+'''
+Esta constante se puede guardar desde el archivo de configuración por si acaso se quisiera emplear en otro archivo.
+'''
 CONFIDENCE_THRESHOLD = 0.5
 
 
@@ -304,7 +308,6 @@ def reconstruct_frame_with_extrinsics(cameras: Dict[str, Camera], frame_keypoint
                                      person_height_cm: float) -> Optional[np.ndarray]:
     """
     Reconstruye un frame usando cámaras con extrínsecos pre-calculados.
-    Elimina la duplicación de código para el cálculo de extrínsecos.
     """
     try:
         # Triangular inicial con SVD

@@ -1,8 +1,14 @@
+'''
+Este archivo se encuentra aparte del flujo principal de procesamiento,
+y sirve para analizar y verificar las reconstrucciones 3D ya procesadas.
+
+complete_analysis.py es más completo, pero este muestra las coordenadas 3D de cada keypoint
+'''
 import numpy as np
 import sys
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Optional
 
 # Asegurar que config esté en el path
 _ROOT = Path(__file__).resolve().parents[3]
@@ -413,7 +419,7 @@ def main():
     Función principal que analiza una reconstrucción 3D ya almacenada.
     """
     
-    print("� ANÁLISIS DE RECONSTRUCCIÓN 3D ALMACENADA")
+    print("ANÁLISIS DE RECONSTRUCCIÓN 3D ALMACENADA")
     print("="*80)
     print(f"Paciente: {PATIENT_ID}, Sesión: {SESSION_ID}")
     print(f"Frame: {FRAME_ID}, Chunk: {CHUNK_ID}")
@@ -427,7 +433,7 @@ def main():
         
         if points_3d is None:
             logger.error("No se pudo cargar la reconstrucción 3D")
-            print("❌ Error: No se encontró el archivo de reconstrucción 3D")
+            print("Error: No se encontró el archivo de reconstrucción 3D")
             return
         
         print(f"✓ Reconstrucción 3D cargada exitosamente")
@@ -438,7 +444,7 @@ def main():
         
         if not validity_info['valid']:
             logger.error(f"Reconstrucción 3D inválida: {validity_info['reason']}")
-            print(f"❌ Error: {validity_info['reason']}")
+            print(f"Error: {validity_info['reason']}")
             return
         
         print(f"\n=== INFORMACIÓN DE LA RECONSTRUCCIÓN")
@@ -465,10 +471,10 @@ def main():
         
     except FileNotFoundError as e:
         logger.error(f"Archivo no encontrado: {e}")
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
     except Exception as e:
         logger.error(f"Error en el análisis: {e}")
-        print(f"❌ Error inesperado: {e}")
+        print(f"Error inesperado: {e}")
 
 
 if __name__ == "__main__":

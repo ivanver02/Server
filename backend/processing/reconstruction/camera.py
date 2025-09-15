@@ -2,13 +2,13 @@
 
 Extrínsecos siempre relativos a camera0 (referencia):
 camera0 -> R = I, t = 0
-Otras cámaras -> R, t calculados en runtime para cada sesión usando sólo keypoints 2D procesados.
+Otras cámaras -> R, t calculados en runtime para cada sesión usando sólo keypoints 2D procesados, y posteriormente optimizados con Bundle Adjustment.
+optimizados con Bundle Adjustment.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import numpy as np
-from typing import Optional
 from pathlib import Path
 import sys
 

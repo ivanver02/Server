@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.optimize import least_squares
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,10 @@ def rotation_matrix_to_rodrigues(R: np.ndarray) -> np.ndarray:
     return angle * axis
 
 def project_point(point_3d: np.ndarray, camera) -> np.ndarray:
-    """Proyecta un punto 3D a la imagen usando los parámetros de la cámara."""
+    """
+    Proyecta un punto 3D a la imagen usando los parámetros de la cámara.
+    No se reutiliza el código de reprojection.py porque el algoritmo fue encontrado con este código.
+    """
     # Transformar al sistema de coordenadas de la cámara
     if hasattr(camera, 'R') and hasattr(camera, 't'):
         # Aplicar rotación y traslación
@@ -153,9 +156,6 @@ def bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
                           reference_camera: str = "camera0") -> Tuple[np.ndarray, Dict]:
     """
     Bundle Adjustment completo que optimiza puntos 3D y parámetros extrínsecos para N cámaras.
-    
-    Esta función ha sido refactorizada para soportar cualquier número de cámaras manteniendo
-    exactamente la misma lógica que la versión original de 3 cámaras.
     
     Args:
         points_3d_init: Puntos 3D iniciales (N, 3)
@@ -309,6 +309,7 @@ def bundle_adjustment(points_3d_init: np.ndarray, cameras: Dict,
 def print_extrinsic_matrices_bundle(cameras: Dict, title: str = "PARÁMETROS EXTRÍNSECOS BUNDLE ADJUSTMENT"):
     """
     Muestra las matrices de parámetros extrínsecos optimizados por Bundle Adjustment.
+    Se emplea únicamente en complete_analysis.py para mostrar resultados.
     
     Args:
         cameras: Diccionario de cámaras optimizadas

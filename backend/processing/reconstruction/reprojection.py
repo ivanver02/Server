@@ -1,4 +1,8 @@
-"""Cálculo de error de reproyección por frame."""
+"""
+Cálculo de error de reproyección por frame
+Se emplea solo en complete_analysis.py para mostrar resultados. En el bundle adjustment
+se calcula internamente.
+"""
 import numpy as np
 from typing import Dict, Tuple
 

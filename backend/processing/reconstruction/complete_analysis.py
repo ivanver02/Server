@@ -1,8 +1,15 @@
+'''
+Este archivo se encuentra aparte del flujo principal de procesamiento,
+y sirve para analizar y verificar las reconstrucciones 3D ya procesadas.
+
+Es más completo que analyze_3D_keypoint.py, muestra los parámetros extrínsecos
+antes y después de ser optimizados, así como el ángulo de ambas rodillas.
+'''
 import numpy as np
 import sys
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Tuple
 
 # Asegurar que config esté en el path
 _ROOT = Path(__file__).resolve().parents[3]
@@ -126,9 +133,9 @@ class GaitAnalysis3D:
             "camera2": (self.coordinates_camera_2.copy(), self.confidences_camera_2.copy()),
         }
 
-    #================
+
     # ANÁLISIS 2D 
-    #================
+
     
     def filter_valid_keypoints(self, confidence_threshold: float = 0.5) -> np.ndarray:
         """Filtra keypoints que tienen confianza > threshold en todas las cámaras."""
@@ -311,9 +318,7 @@ class GaitAnalysis3D:
                 print(f"{name:<40} | {value_str:<12} | {normal_range:<15} | {status}")
             
 
-    #===============
     # ANÁLISIS 3D
-    #===============
     
     def calculate_scale_factor_from_height(self, points_3d: np.ndarray):
         """Calcula el factor de escala basado en la altura de la persona (nariz a tobillos)"""
@@ -607,8 +612,6 @@ class GaitAnalysis3D:
             cameras_rigorous = estimate_extrinsics(
                 cameras, frame_keypoints, self.CONFIDENCE_THRESHOLD
             )
-
-            # print(f"\nCÁMARAS CONFIGURADAS (RIGUROSO): {cameras_rigorous}\n")
             
             # Mostrar matrices de parámetros extrínsecos estimados
             print_extrinsic_matrices(cameras_rigorous, "PARÁMETROS EXTRÍNSECOS ESTIMADOS")
@@ -630,54 +633,14 @@ class GaitAnalysis3D:
             for cam_id, error in errors_svd.items():
                 print(f"  {cam_id}: {error:.2f} píxeles")
             
-            '''
             # PARTE 2: Bundle Adjustment
             print(f"\n{'='*50}")
             print("PARTE 2: BUNDLE ADJUSTMENT (Refinamiento)")
             print(f"{'='*50}")
             
             if svd_count > 0:
-                points_3d_ba = refine_frame_bundle_adjustment(
-                    points_3d_svd, cameras_rigorous, frame_keypoints
-                )
-                
-                ba_count = np.sum(~np.isnan(points_3d_ba[:, 0]))
-                print(f"Bundle Adjustment: {svd_count} -> {ba_count} puntos válidos")
-                
-                # Errores de reproyección con Bundle Adjustment
-                errors_ba = reprojection_error(points_3d_ba, cameras_rigorous, frame_keypoints)
-                print(f"\nErrores de reproyección (Bundle Adjustment):")
-                for cam_id, error in errors_ba.items():
-                    print(f"  {cam_id}: {error:.2f} píxeles")
-                
-                # COMPARACIÓN
-                print(f"\n{'='*50}")
-                print("COMPARACIÓN SVD vs BUNDLE ADJUSTMENT")
-                print(f"{'='*50}")
-                
-                print("Mejora en errores de reproyección:")
-                for cam_id in errors_svd.keys():
-                    improvement = errors_svd[cam_id] - errors_ba[cam_id]
-                    print(f"  {cam_id}: {errors_svd[cam_id]:.2f} -> {errors_ba[cam_id]:.2f} px ({improvement:+.2f} px)")
-                
-                avg_error_svd = np.mean(list(errors_svd.values()))
-                avg_error_ba = np.mean(list(errors_ba.values()))
-                total_improvement = avg_error_svd - avg_error_ba
-                print(f"\nError promedio: {avg_error_svd:.2f} -> {avg_error_ba:.2f} px ({total_improvement:+.2f} px)")
-                
-            else:
-                print("ERROR: No hay puntos válidos de SVD para refinar con Bundle Adjustment")
-                points_3d_ba = points_3d_svd
-            '''
-            
-            # PARTE 3: Full Bundle Adjustment
-            print(f"\n{'='*50}")
-            print("PARTE 3: FULL BUNDLE ADJUSTMENT (Optimización Completa)")
-            print(f"{'='*50}")
-            
-            if svd_count > 0:
                 try:
-                    # Preparar datos para full bundle adjustment
+                    # Preparar datos para bundle adjustment
                     points_3d_full_ba, cameras_full_ba = bundle_adjustment(
                         points_3d_svd, cameras_rigorous, frame_keypoints, 
                         confidence_threshold=self.CONFIDENCE_THRESHOLD
@@ -686,13 +649,13 @@ class GaitAnalysis3D:
                     full_ba_count = np.sum(~np.isnan(points_3d_full_ba[:, 0]))
                     print(f"Bundle Adjustment: {svd_count} -> {full_ba_count} puntos válidos")
                     
-                    # Errores de reproyección con Full Bundle Adjustment
+                    # Errores de reproyección con Bundle Adjustment
                     errors_full_ba = reprojection_error(points_3d_full_ba, cameras_full_ba, frame_keypoints)
                     print(f"\nErrores de reproyección (Bundle Adjustment):")
                     for cam_id, error in errors_full_ba.items():
                         print(f"  {cam_id}: {error:.2f} píxeles")
                     
-                    # Mostrar matrices optimizadas por Full Bundle Adjustment
+                    # Mostrar matrices optimizadas por Bundle Adjustment
                     print_extrinsic_matrices_bundle(cameras_full_ba, "PARÁMETROS EXTRÍNSECOS OPTIMIZADOS - FULL BUNDLE ADJUSTMENT")
                     
                     # COMPARACIÓN COMPLETA
@@ -737,7 +700,6 @@ class GaitAnalysis3D:
                 cameras_full_ba = cameras_rigorous
                 points_3d_full_ba = points_3d_svd
             
-            # logger.info(f"Triangulación completada - SVD: {len(points_3d_svd)} puntos, BA: {len(points_3d_ba)} puntos, Full BA: {len(points_3d_full_ba)} puntos")
             
             # ANÁLISIS DE MEDIDAS CORPORALES ESCALADAS
             

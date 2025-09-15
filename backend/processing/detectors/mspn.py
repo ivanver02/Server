@@ -3,7 +3,7 @@ from .base import BasePoseDetector
 
 class MSPNDetector(BasePoseDetector):
     """
-    Detector de pose utilizando MSPN (Multi-Stage Pose Network)
+    Detector de pose utilizando MSPN. Actualmente no se usa en el flujo principal, porque tarda mucho en procesar y tampoco aporta mejoras significativas en los resultados.
     """
     
     def __init__(self):
