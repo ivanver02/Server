@@ -427,6 +427,7 @@ def start_3d_reconstruction(patient_id: str, session_id: str, max_chunk: int, pe
     if use_parallel:
         # PROCESAMIENTO PARALELO
         num_processes = min(cpu_count(), len(available_frames))  # No usar más procesos que chunks
+        # num_processes = cpu_count()
         logger.info(f"Usando {num_processes} procesos paralelos para {len(available_frames)} chunks")
         
         # Preparar datos para cada chunk
