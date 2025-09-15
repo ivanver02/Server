@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 import threading
+import os
 
 # Configurar logging
 logging.basicConfig(
@@ -56,6 +57,65 @@ def health_check():
         'status': 'healthy',
         'service': 'gait-analysis-server',
         'version': '1.0.0'
+    })
+
+@app.route('/api/session/check', methods=['POST'])
+def check_session():
+    """Endpoint de chequeo de sesiones duplicadas"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+            
+    patient_id = data.get('patient_id')
+    session_id = data.get('session_id') 
+
+    session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+    duplicate = session_path.exists()
+
+    return jsonify({
+        'session_exists': duplicate,
+    })
+
+@app.route('/api/session/delete', methods=['POST'])
+def delete_session():
+    """Endpoint de chequeo de sesiones duplicadas"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+            
+    patient_id = data.get('patient_id')
+    session_id = data.get('session_id') 
+
+    session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+
+    if session_path.exists():
+            import shutil
+            shutil.rmtree(session_path)
+            logger.info(f"Directorio de sesión eliminado: {session_path}")
+        
+    # También limpiar datos procesados si existen
+    processed_paths = [
+        data_config.photos_dir / f"patient{patient_id}" / f"session{session_id}",
+        data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}",
+        data_config.keypoints_3d_dir / f"patient{patient_id}" / f"session{session_id}"
+    ]
+        
+    for path in processed_paths:
+        if path.exists():
+            import shutil
+            shutil.rmtree(path)
+            logger.info(f"Directorio procesado eliminado: {path}")
+
+    for subdir in os.listdir(data_config.unprocessed_dir):
+        base = os.path.join(data_config.unprocessed_dir, subdir, f"patient{patient_id}", f"session{session_id}")
+        if os.path.isdir(base):
+            shutil.rmtree(base)
+        
+    # Eliminar sesión
+    logger.info(f"Sesión eliminada - Paciente: {patient_id}, Sesión: {session_id}")
+
+    return jsonify({
+        'deleted': True,
     })
 
 @app.route('/api/session/status', methods=['GET'])
