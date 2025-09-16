@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 import threading
+import os
 
 # Configurar logging
 logging.basicConfig(
@@ -56,6 +57,65 @@ def health_check():
         'status': 'healthy',
         'service': 'gait-analysis-server',
         'version': '1.0.0'
+    })
+
+@app.route('/api/session/check', methods=['POST'])
+def check_session():
+    """Endpoint de chequeo de sesiones duplicadas"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+            
+    patient_id = data.get('patient_id')
+    session_id = data.get('session_id') 
+
+    session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+    duplicate = session_path.exists()
+
+    return jsonify({
+        'session_exists': duplicate,
+    })
+
+@app.route('/api/session/delete', methods=['POST'])
+def delete_session():
+    """Endpoint de chequeo de sesiones duplicadas"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+            
+    patient_id = data.get('patient_id')
+    session_id = data.get('session_id') 
+
+    session_path = data_config.unprocessed_dir / f"patient{patient_id}" / f"session{session_id}"
+
+    if session_path.exists():
+            import shutil
+            shutil.rmtree(session_path)
+            logger.info(f"Directorio de sesión eliminado: {session_path}")
+        
+    # También limpiar datos procesados si existen
+    processed_paths = [
+        data_config.photos_dir / f"patient{patient_id}" / f"session{session_id}",
+        data_config.keypoints_2d_dir / f"patient{patient_id}" / f"session{session_id}",
+        data_config.keypoints_3d_dir / f"patient{patient_id}" / f"session{session_id}"
+    ]
+        
+    for path in processed_paths:
+        if path.exists():
+            import shutil
+            shutil.rmtree(path)
+            logger.info(f"Directorio procesado eliminado: {path}")
+
+    for subdir in os.listdir(data_config.unprocessed_dir):
+        base = os.path.join(data_config.unprocessed_dir, subdir, f"patient{patient_id}", f"session{session_id}")
+        if os.path.isdir(base):
+            shutil.rmtree(base)
+        
+    # Eliminar sesión
+    logger.info(f"Sesión eliminada - Paciente: {patient_id}, Sesión: {session_id}")
+
+    return jsonify({
+        'deleted': True,
     })
 
 @app.route('/api/session/status', methods=['GET'])
@@ -398,47 +458,7 @@ def receive_chunk():
         
         logger.info(f"Chunk recibido - Cámara: {camera_id}, Chunk: {chunk_number}, Tamaño: {file_path.stat().st_size} bytes")
 
-        # Inicializar solo una vez el coordinador de los detectores 2D (si no se usa el lock, se inicializa varias veces y falla)
-        with coordinator_lock:
-            if not pose_coordinator.initialized:
-                logger.info("Inicializando coordinador de procesamiento de pose...")
-                initialization_success = pose_coordinator.initialize_all()
-                
-                # Permitir continuar aunque algunos detectores fallen, siempre que al menos uno funcione
-                if not initialization_success:
-                    logger.error("Error inicializando coordinador de pose - ningún detector se inicializó correctamente")
-                    return jsonify({'error': 'Error initializing pose processing coordinator - no detectors available'}), 500
-                else:
-                    logger.info("Coordinador inicializado correctamente con al menos un detector")
-        
-        # Procesar todos los chunks de todas las cámaras
-        processing_results = None
-        logger.info(f"Procesando chunk {chunk_number} de cámara {camera_id}")
-        
-        # Usar semáforo para permitir chunks procesándose simultáneamente según configuración (1 o 2 GPUs)
-        with processing_semaphore:
-            logger.info(f"Iniciando procesamiento paralelo de chunk {chunk_number} cámara {camera_id} (máximo {gpu_config.max_concurrent_chunks} simultáneos)")
-            
-            # Procesar este chunk con todos los detectores
-            chunk_id = str(chunk_number)
-            processing_results = pose_coordinator.process_chunk(
-                video_path=file_path,
-                patient_id=patient_id,
-                session_id=session_id,
-                camera_id=camera_id,
-                chunk_id=chunk_id
-            )
-            
-            success_count = sum(processing_results.values())
-            logger.info(f"Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
-            logger.info(f"Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
-            
-            # Registrar finalización del chunk en ensemble processor. Cuando se haya procesado el último chunk de todas las cámaras, se iniciará automáticamente el ensemble.
-            chunks_completed = ensemble_processor.register_chunk_completion(
-                patient_id, session_id, f"camera{camera_id}", chunk_number
-            )
-            if chunks_completed:
-                logger.info(f"¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
+        threading.Thread(target=process_chunk_async, args=(patient_id, session_id, camera_id, chunk_number, file_path)).start()
 
         response_data = {
             'status': 'chunk_received',
@@ -449,17 +469,59 @@ def receive_chunk():
             'message': 'Chunk saved successfully'
         }
         
-        # Agregar información de procesamiento.
-        response_data['processing_results'] = processing_results
-        response_data['processed'] = True
-        response_data['successful_detectors'] = sum(processing_results.values())
-        response_data['total_detectors'] = len(processing_results)
-        
         return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Error recibiendo chunk: {str(e)}")
         return jsonify({'error': f'Failed to receive chunk: {str(e)}'}), 500
+
+def process_chunk_async(patient_id: str, session_id: str, camera_id: int, chunk_number: int, file_path: str):
+    """
+    Procesar chunk de video de forma asíncrona
+    """
+    # Inicializar solo una vez el coordinador de los detectores 2D (si no se usa el lock, se inicializa varias veces y falla)
+    with coordinator_lock:
+        if not pose_coordinator.initialized:
+            logger.info("Inicializando coordinador de procesamiento de pose...")
+            initialization_success = pose_coordinator.initialize_all()
+            
+            # Permitir continuar aunque algunos detectores fallen, siempre que al menos uno funcione
+            if not initialization_success:
+                logger.error("Error inicializando coordinador de pose - ningún detector se inicializó correctamente")
+                return jsonify({'error': 'Error initializing pose processing coordinator - no detectors available'}), 500
+            else:
+                logger.info("Coordinador inicializado correctamente con al menos un detector")
+    
+    # Procesar todos los chunks de todas las cámaras
+    processing_results = None
+    logger.info(f"Procesando chunk {chunk_number} de cámara {camera_id}")
+    
+    # Usar semáforo para permitir chunks procesándose simultáneamente según configuración (1 o 2 GPUs)
+    with processing_semaphore:
+        logger.info(f"Iniciando procesamiento paralelo de chunk {chunk_number} cámara {camera_id} (máximo {gpu_config.max_concurrent_chunks} simultáneos)")
+        
+        # Procesar este chunk con todos los detectores
+        chunk_id = str(chunk_number)
+        processing_results = pose_coordinator.process_chunk(
+            video_path=file_path,
+            patient_id=patient_id,
+            session_id=session_id,
+            camera_id=camera_id,
+            chunk_id=chunk_id
+        )
+        
+        success_count = sum(processing_results.values())
+        logger.info(f"Chunk {chunk_number} cámara {camera_id} procesado - {success_count}/{len(processing_results)} detectores exitosos")
+        logger.info(f"Procesamiento paralelo completado para chunk {chunk_number} cámara {camera_id}")
+        
+        # Registrar finalización del chunk en ensemble processor. Cuando se haya procesado el último chunk de todas las cámaras, se iniciará automáticamente el ensemble.
+        chunks_completed = ensemble_processor.register_chunk_completion(
+            patient_id, session_id, f"camera{camera_id}", chunk_number
+        )
+        if chunks_completed:
+            logger.info(f"¡Chunk final completado por todas las cámaras! Ensemble iniciado automáticamente")
+
+
 
 @app.route('/api/gpu/status', methods=['GET'])
 def get_gpu_status():
