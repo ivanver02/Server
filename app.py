@@ -135,7 +135,8 @@ def start_session():
     {
         "patient_id": "string",
         "session_id": "string", 
-        "cameras_count": int
+        "cameras_count": int,
+        "user_height": float  # Altura del paciente en cm (renombrado a patient_height internamente)
     }
     """
     try:
@@ -147,9 +148,16 @@ def start_session():
         patient_id = data.get('patient_id')
         session_id = data.get('session_id') 
         cameras_count = data.get('cameras_count', 3)
+        user_height = data.get('user_height')  # Recibir user_height desde la petición
         
         if not patient_id or not session_id:
             return jsonify({'error': 'patient_id and session_id are required'}), 400
+        
+        if user_height is None:
+            return jsonify({'error': 'user_height is required'}), 400
+        
+        # Renombrar user_height a patient_height internamente
+        patient_height = user_height
         
         # Verificar si ya hay una sesión activa y finalizarla automáticamente
         if current_session['is_active']:
@@ -164,7 +172,8 @@ def start_session():
                 'patient_id': None,
                 'session_id': None,
                 'is_active': False,
-                'cameras_count': 0
+                'cameras_count': 0,
+                'patient_height': None
             })
             
             logger.info(f"Sesión anterior finalizada automáticamente: patient{old_patient_id}/session{old_session_id}")
@@ -181,23 +190,25 @@ def start_session():
             'patient_id': patient_id,
             'session_id': session_id,
             'is_active': True,
-            'cameras_count': cameras_count
+            'cameras_count': cameras_count,
+            'patient_height': patient_height  # Actualizar la altura del paciente
         })
         
         # Registrar sesión en ensemble processor
-        ensemble_processor.register_session_start(patient_id, session_id, cameras_count)
+        ensemble_processor.register_session_start(patient_id, session_id, cameras_count, patient_height)
         
         # Reiniciar flag de verificación de chunk 2. Esto es para cuando las cámaras fallan, que algunas graban chunks y otras no. Si se recibe el primer chunk 2, se verificará que todas las cámaras tengan al menos el chunk 0.
         global chunk_2_verified
         chunk_2_verified = False
         
-        logger.info(f"Sesión iniciada - Paciente: {patient_id}, Sesión: {session_id}, Cámaras: {cameras_count}")
+        logger.info(f"Sesión iniciada - Paciente: {patient_id}, Sesión: {session_id}, Cámaras: {cameras_count}, Altura: {patient_height} cm")
         
         return jsonify({
             'status': 'session_started',
             'patient_id': patient_id,
             'session_id': session_id,
             'cameras_count': cameras_count,
+            'patient_height': patient_height,
             'directories_created': session_dirs
         })
         

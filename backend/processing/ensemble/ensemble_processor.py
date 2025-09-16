@@ -78,7 +78,7 @@ class EnsembleProcessor:
 
         return final_names
     
-    def register_session_start(self, patient_id: str, session_id: str, cameras_count: int):
+    def register_session_start(self, patient_id: str, session_id: str, cameras_count: int, patient_height: float):
         """Registra el inicio de una sesión para tracking"""
         if patient_id not in self.active_sessions:
             self.active_sessions[patient_id] = {}
@@ -86,10 +86,11 @@ class EnsembleProcessor:
         self.active_sessions[patient_id][session_id] = {
             'max_chunk': -1,
             'cameras_count': cameras_count,
-            'completed_cameras': set()
+            'completed_cameras': set(),
+            'patient_height': patient_height  # Registrar la altura del paciente
         }
         
-        logger.info(f"Sesión registrada: patient_id={patient_id}, session_id={session_id}, cameras_count={cameras_count}")
+        logger.info(f"Sesión registrada: patient_id={patient_id}, session_id={session_id}, cameras_count={cameras_count}, patient_height={patient_height} cm")
 
     def get_max_chunk(self, patient_id: str, session_id: str) -> int:
         """Obtiene el chunk máximo de una sesión"""
@@ -132,6 +133,7 @@ class EnsembleProcessor:
             return False
             
         session_data['completed_cameras'].add(camera_id)
+        patient_height = session_data.get('patient_height')
         logger.info(f"Chunk final completado: patient_id={patient_id}, session_id={session_id}, camera_id={camera_id}, chunk_id={chunk_id}")
         logger.info(f"Cámaras completadas: {len(session_data['completed_cameras'])}/{session_data['cameras_count']}")
         
@@ -141,14 +143,14 @@ class EnsembleProcessor:
             # Ejecutar ensemble en thread separado
             threading.Thread(
                 target=self._process_session_ensemble_async,
-                args=(patient_id, session_id, max_chunk),
+                args=(patient_id, session_id, max_chunk, patient_height),
                 daemon=True
             ).start()
             return True
             
         return False
 
-    def _process_session_ensemble_async(self, patient_id: str, session_id: str, max_chunk: int):
+    def _process_session_ensemble_async(self, patient_id: str, session_id: str, max_chunk: int, patient_height: float):
         """Procesa el ensemble de forma asíncrona"""
         try:
             self.process_session_ensemble(patient_id, session_id, max_chunk)
@@ -160,17 +162,8 @@ class EnsembleProcessor:
                     del self.active_sessions[patient_id]
 
             try:
-                '''
-                IMPORTANTE: Si se quiere obtener una medida absoluta del paciente
-                (como por ejemplo, la longitud de la rodilla a la cadera), se debe
-                escalar la reconstrucción 3D. Se debería de usar la altura real del paciente,
-                pidiéndola en el frontend, y adaptando el flujo a esa altura. De momento, establezco la
-                mía como valor por defecto.
-                '''
-                person_height_cm = 190.0 
-                
                 logger.info(f"Iniciando reconstrucción 3D para patient{patient_id}/session{session_id}")
-                start_3d_reconstruction(patient_id, session_id, max_chunk, person_height_cm)
+                start_3d_reconstruction(patient_id, session_id, max_chunk, patient_height)
                 
             except Exception as reconstruction_error:
                 logger.error(f"Error en reconstrucción 3D: {reconstruction_error}")
