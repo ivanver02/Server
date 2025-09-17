@@ -133,7 +133,7 @@ class EnsembleConfig:
 class CodeClientConfig:
     """Configuración para comunicarse con el proyecto 'Code' que recibe videos anotados"""
     # IP de la máquina donde corre el proyecto Code dentro de la subred
-    host_ip: str = "172.16.187.248"
+    host_ip: str = "172.16.163.1"
     port: int = 5000
     upload_endpoint: str = "/api/annotated_videos/upload"
 
