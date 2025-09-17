@@ -1,6 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Dict
 from pathlib import Path
+import logging
+
+# Configurar logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Directorio base del proyecto
 BASE_DIR = Path(__file__).parent.parent
@@ -43,6 +48,15 @@ class GPUConfig:
     def is_gpu_available(self, gpu_id: int) -> bool:
         """Verificar si una GPU específica está disponible"""
         return gpu_id in self.available_gpus
+    
+    def reduce_to_single_gpu(self):
+        """
+        Reducir la configuración a una única GPU disponible
+        """
+        if len(self.available_gpus) > 1:
+            logger.warning("Reduciendo configuración a una única GPU debido a fallos previos.")
+            self.available_gpus = [self.available_gpus[0]]
+            logger.info(f"Nueva configuración de GPUs: {self.available_gpus}")
 
 
 @dataclass

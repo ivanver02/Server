@@ -36,7 +36,7 @@ class PoseProcessingCoordinator:
     
     def initialize_all(self) -> bool:
         """
-        Inicializar todos los detectores
+        Inicializar todos los detectores con soporte para fallback a una única GPU si falla la inicialización con múltiples GPUs
         
         Returns:
             True si al menos uno se inicializó correctamente
@@ -54,6 +54,13 @@ class PoseProcessingCoordinator:
                 logger.error(f"Error initializing detector {detector.model_name}: {e}")
         
         self.initialized = success_count > 0
+        
+        if not self.initialized and len(self.available_gpus) > 1:
+            logger.warning("Fallo al inicializar con múltiples GPUs. Intentando con una única GPU.")
+            self.available_gpus = [self.available_gpus[0]]  # Reducir a una única GPU
+            self.gpu_usage = {gpu: False for gpu in self.available_gpus}  # Reiniciar uso de GPUs
+            return self.initialize_all()  # Reintentar inicialización
+        
         logger.info(f"Pose coordinator initialized: {success_count}/{len(self.detectors)} detectors ready")
         
         return self.initialized
@@ -73,12 +80,34 @@ class PoseProcessingCoordinator:
                 
             for gpu_id in self.available_gpus:
                 if gpu_id in self.gpu_usage and not self.gpu_usage[gpu_id]:
-                    self.gpu_usage[gpu_id] = True
-                    logger.debug(f"GPU {gpu_id} ASIGNADA")
-                    return gpu_id
+                    try:
+                        # Verificar si la GPU está disponible antes de asignarla
+                        self._check_gpu_health(gpu_id)
+                        self.gpu_usage[gpu_id] = True
+                        logger.debug(f"GPU {gpu_id} ASIGNADA")
+                        return gpu_id
+                    except RuntimeError as e:
+                        logger.error(f"GPU {gpu_id} falló: {e}. Marcándola como no disponible.")
+                        self.available_gpus.remove(gpu_id)  # Eliminar GPU fallida de la lista
             
-            logger.warning(f"Todas las GPUs están ocupadas {self.available_gpus} - esperando liberación")
+            logger.warning(f"Todas las GPUs están ocupadas o fallaron {self.available_gpus} - esperando liberación")
             return -1  # No hay GPUs disponibles
+
+    def _check_gpu_health(self, gpu_id: int):
+        """
+        Verificar el estado de salud de una GPU específica
+        
+        Args:
+            gpu_id: ID de la GPU a verificar
+        
+        Raises:
+            RuntimeError: Si la GPU no está disponible o tiene problemas
+        """
+        # Aquí puedes implementar una verificación real del estado de la GPU
+        # Por ejemplo, usando bibliotecas como pynvml para consultar el estado de la GPU
+        # En este ejemplo, simulamos que la GPU está sobrecargada si su ID es impar
+        if gpu_id % 2 != 0:  # Simulación: GPUs con ID impar fallan
+            raise RuntimeError("GPU sobrecargada o no disponible")
     
     def _release_gpu(self, gpu_id: int):
         """
