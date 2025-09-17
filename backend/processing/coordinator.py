@@ -3,6 +3,7 @@ import threading
 import os
 from pathlib import Path
 from typing import Dict, Any
+import subprocess
 
 from .detectors import VitPoseDetector, HRNetDetector, CSPDetector
 # from .detectors import MSPNDetector  # Comentado - no usar MSPN
@@ -95,19 +96,35 @@ class PoseProcessingCoordinator:
 
     def _check_gpu_health(self, gpu_id: int):
         """
-        Verificar el estado de salud de una GPU específica
-        
+        Verificar el estado de salud de una GPU específica usando `nvidia-smi`
+
         Args:
             gpu_id: ID de la GPU a verificar
-        
+
         Raises:
             RuntimeError: Si la GPU no está disponible o tiene problemas
         """
-        # Aquí puedes implementar una verificación real del estado de la GPU
-        # Por ejemplo, usando bibliotecas como pynvml para consultar el estado de la GPU
-        # En este ejemplo, simulamos que la GPU está sobrecargada si su ID es impar
-        if gpu_id % 2 != 0:  # Simulación: GPUs con ID impar fallan
-            raise RuntimeError("GPU sobrecargada o no disponible")
+        try:
+            # Ejecutar el comando nvidia-smi para obtener información de la GPU
+            result = subprocess.run(
+                ["nvidia-smi", "--id={},".format(gpu_id), "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            if result.returncode != 0:
+                raise RuntimeError(f"Error ejecutando nvidia-smi: {result.stderr.strip()}")
+
+            # Parsear la salida para verificar la utilización de la GPU
+            utilization = int(result.stdout.strip())
+            if utilization > 90:  # Ejemplo: considerar la GPU sobrecargada si la utilización supera el 90%
+                raise RuntimeError(f"GPU {gpu_id} sobrecargada (utilización: {utilization}%)")
+
+        except FileNotFoundError:
+            raise RuntimeError("El comando nvidia-smi no está disponible. Asegúrate de que los drivers de NVIDIA estén instalados.")
+        except ValueError:
+            raise RuntimeError(f"No se pudo interpretar la salida de nvidia-smi para GPU {gpu_id}")
     
     def _release_gpu(self, gpu_id: int):
         """
