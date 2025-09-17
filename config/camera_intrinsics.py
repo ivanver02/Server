@@ -19,8 +19,8 @@ CAMERA_INTRINSICS = {
     # Cámara 0 - Referencia (S/N: CPE345P0007S)
     "camera0": {
         "camera_matrix": np.array([
-            [416.5, 0.0, 421.3],  # Valores generados directamente
-            [0.0, 418.2, 263.8],
+            [367.26507568, 0.0, 321.83758545],  # Valores generados directamente
+            [0.0, 367.112854, 239.75827026],
             [0.0, 0.0, 1.0]
         ], dtype=np.float64),
         "distortion_coeffs": np.array([0.12, -0.18, 0.0, 0.0, 0.05], dtype=np.float64),  # k1, k2, p1, p2, k3
@@ -32,8 +32,8 @@ CAMERA_INTRINSICS = {
     # Cámara 1 (S/N: CPE745P0002V) - Ligeras variaciones por tolerancias de fabricación
     "camera1": {
         "camera_matrix": np.array([
-            [417.8, 0.0, 420.1],  # Valores generados directamente
-            [0.0, 416.9, 264.5],
+            [367.21954346, 0.0, 319.96350098],  # Valores generados directamente
+            [0.0, 367.24520874, 240.66537476],
             [0.0, 0.0, 1.0]
         ], dtype=np.float64),
         "distortion_coeffs": np.array([0.115, -0.175, 0.001, -0.0008, 0.048], dtype=np.float64),
@@ -45,8 +45,8 @@ CAMERA_INTRINSICS = {
     # Cámara 2 (S/N: CPE745P0002B) - Ligeras variaciones por tolerancias de fabricación
     "camera2": {
         "camera_matrix": np.array([
-            [418.3, 0.0, 419.7],  # Valores generados directamente
-            [0.0, 417.5, 264.2],
+            [367.29125977, 0.0, 320.05584717],  # Valores generados directamente
+            [0.0, 367.33074951, 240.94950867],
             [0.0, 0.0, 1.0]
         ], dtype=np.float64),
         "distortion_coeffs": np.array([0.125, -0.185, -0.0005, 0.0012, 0.052], dtype=np.float64),
