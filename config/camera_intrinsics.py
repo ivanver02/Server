@@ -23,7 +23,8 @@ CAMERA_INTRINSICS = {
             [0.0, 367.112854, 239.75827026],
             [0.0, 0.0, 1.0]
         ], dtype=np.float64),
-        "distortion_coeffs": np.array([0.12, -0.18, 0.0, 0.0, 0.05], dtype=np.float64),  # k1, k2, p1, p2, k3
+        "distortion_coeffs": np.array([-3.31241898e-02,  3.54048684e-02, -4.07491325e-06, -2.58066721e-04,
+       -1.23792645e-02], dtype=np.float64),  # k1, k2, p1, p2, k3
         "serial_number": "CPE345P0007S",
         "resolution": (640, 480),
         "model": "Orbbec Gemini 335Le"
@@ -36,7 +37,7 @@ CAMERA_INTRINSICS = {
             [0.0, 367.24520874, 240.66537476],
             [0.0, 0.0, 1.0]
         ], dtype=np.float64),
-        "distortion_coeffs": np.array([0.115, -0.175, 0.001, -0.0008, 0.048], dtype=np.float64),
+        "distortion_coeffs": np.array([-0.03170585,  0.03431713,  0.00032519, -0.00052007, -0.01199829], dtype=np.float64),
         "serial_number": "CPE745P0002V", 
         "resolution": (640, 480),
         "model": "Orbbec Gemini 335Le"
@@ -49,7 +50,7 @@ CAMERA_INTRINSICS = {
             [0.0, 367.33074951, 240.94950867],
             [0.0, 0.0, 1.0]
         ], dtype=np.float64),
-        "distortion_coeffs": np.array([0.125, -0.185, -0.0005, 0.0012, 0.052], dtype=np.float64),
+        "distortion_coeffs": np.array([-0.0318352 ,  0.03448541,  0.00026838, -0.0003188 , -0.0119219], dtype=np.float64),
         "serial_number": "CPE745P0002B",
         "resolution": (640, 480), 
         "model": "Orbbec Gemini 335Le"
