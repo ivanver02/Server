@@ -148,16 +148,13 @@ def start_session():
         patient_id = data.get('patient_id')
         session_id = data.get('session_id') 
         cameras_count = data.get('cameras_count', 3)
-        user_height = data.get('user_height')  # Recibir user_height desde la petición
+        patient_height = data.get('user_height') 
         
         if not patient_id or not session_id:
             return jsonify({'error': 'patient_id and session_id are required'}), 400
         
-        if user_height is None:
+        if patient_height is None:
             return jsonify({'error': 'user_height is required'}), 400
-        
-        # Renombrar user_height a patient_height internamente
-        patient_height = user_height
         
         # Verificar si ya hay una sesión activa y finalizarla automáticamente
         if current_session['is_active']:

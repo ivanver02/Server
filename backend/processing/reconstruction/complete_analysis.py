@@ -22,14 +22,14 @@ try:
     from reprojection import reprojection_error
     from calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
     from bundle_adjustment import bundle_adjustment, print_extrinsic_matrices_bundle
+    from backend.tests.reconstruccion_2D import load_ensemble_keypoints
 except ImportError:
     from .camera import Camera
     from .triangulation_svd import triangulate_frame_svd
     from .reprojection import reprojection_error
     from .calculate_extrinsics import estimate_extrinsics, print_extrinsic_matrices
     from .bundle_adjustment import bundle_adjustment, print_extrinsic_matrices_bundle
-
-from backend.tests.reconstruccion_2D import load_ensemble_keypoints
+    from ..backend.tests.reconstruccion_2D import load_ensemble_keypoints
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -49,6 +49,8 @@ class GaitAnalysis3D:
         self.chunk_id = chunk_id
         self.frame_id = frame_id
         self.person_height_cm = person_height_cm
+        self.coordinates = {}  # Almacenar coordenadas por cámara
+        self.confidences = {}  # Almacenar confianzas por cámara
         # Cargar datos reales desde archivos .npy
         self._load_keypoints_data()
 
@@ -62,8 +64,11 @@ class GaitAnalysis3D:
         if not base_path.exists():
             raise FileNotFoundError(f"Directorio base no encontrado: {base_path}")
         
+        # Reemplazar referencias de cámara codificadas por detección dinámica
+        camera_ids = self.get_camera_ids(base_path)
+
         # Cargar datos para cada cámara
-        for camera_id in ["camera0", "camera1", "camera2"]:
+        for camera_id in camera_ids:
             # Construir ruta del archivo - formato: frame_chunk.npy (ej: 44_3.npy)
             coords_file = base_path / camera_id / "coordinates" / f"{self.frame_id}_{self.chunk_id}.npy"
             confs_file = base_path / camera_id / "confidence" / f"{self.frame_id}_{self.chunk_id}.npy"
@@ -78,21 +83,17 @@ class GaitAnalysis3D:
                 # Cargar coordenadas y confianzas
                 coords = np.load(coords_file)
                 confs = np.load(confs_file)
-
-                # Asignar a los atributos de la clase según la cámara
-                if camera_id == "camera0":
-                    self.coordinates_camera_0 = coords
-                    self.confidences_camera_0 = confs
-                elif camera_id == "camera1":
-                    self.coordinates_camera_1 = coords
-                    self.confidences_camera_1 = confs
-                elif camera_id == "camera2":
-                    self.coordinates_camera_2 = coords
-                    self.confidences_camera_2 = confs
-                    
+                self.coordinates[camera_id] = coords
+                self.confidences[camera_id] = confs
             except Exception as e:
                 raise RuntimeError(f"Error al cargar datos para {camera_id}: {e}")
             
+    def get_camera_ids(self, base_path: Path):
+        """Obtiene los IDs de las cámaras disponibles en el directorio base."""
+        camera_dirs = [d for d in (base_path).iterdir() if d.is_dir()]
+        camera_ids = [d.name for d in camera_dirs if d.name.startswith("camera")]
+        return camera_ids
+
     def get_camera_diagnostics(self, cam, reference_cam):
         """Calcula diagnósticos básicos de una cámara respecto a la de referencia."""
         # Calcular baseline
@@ -117,9 +118,13 @@ class GaitAnalysis3D:
 
     def create_cameras_from_config(self) -> Dict[str, Camera]:
         """Crea las cámaras usando la configuración de intrínsecos"""
+        # Reemplazar referencias de cámara codificadas por detección dinámica
+        base_path = _ROOT / "data" / "processed" / "2D_keypoints" / f"patient{self.patient_id}" / f"session{self.session_id}"
+        camera_ids = self.get_camera_ids(base_path)
+
+        # Crear cámaras para cada ID de cámara detectado
         cameras = {}
-        for cam_id in ["camera0", "camera1", "camera2"]:
-            # Crear cámara base
+        for cam_id in camera_ids:
             cam = Camera.create(cam_id)
             # Los extrínsecos se estimarán posteriormente
             cameras[cam_id] = cam
@@ -127,10 +132,10 @@ class GaitAnalysis3D:
 
     def prepare_frame_data(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
         """Prepara los datos del frame con los keypoints y confianzas"""
+        # Replace hardcoded camera references with dynamic handling
         return {
-            "camera0": (self.coordinates_camera_0.copy(), self.confidences_camera_0.copy()),
-            "camera1": (self.coordinates_camera_1.copy(), self.confidences_camera_1.copy()),
-            "camera2": (self.coordinates_camera_2.copy(), self.confidences_camera_2.copy()),
+            camera_id: (self.coordinates[camera_id].copy(), self.confidences[camera_id].copy())
+            for camera_id in self.coordinates.keys()
         }
 
 
@@ -141,9 +146,10 @@ class GaitAnalysis3D:
         """Filtra keypoints que tienen confianza > threshold en todas las cámaras."""
         
         # Crear máscara de puntos válidos
-        valid_mask = (self.confidences_camera_0 > confidence_threshold) & \
-                     (self.confidences_camera_1 > confidence_threshold) & \
-                     (self.confidences_camera_2 > confidence_threshold)
+        valid_mask = np.logical_and.reduce([
+            self.confidences[camera_id] > confidence_threshold
+            for camera_id in self.confidences.keys()
+        ])
         
         print(f"=== FILTRADO DE KEYPOINTS 2D")
         print(f"Umbral de confianza: {confidence_threshold}")
@@ -162,10 +168,10 @@ class GaitAnalysis3D:
         scale_factors = {}
         target_distance_cm = self.person_height_cm - 15.0  # Altura menos 15cm
         
+        # Replace hardcoded camera references with dynamic handling
         cameras_data = {
-            "camera0": self.coordinates_camera_0,
-            "camera1": self.coordinates_camera_1, 
-            "camera2": self.coordinates_camera_2
+            camera_id: self.coordinates[camera_id]
+            for camera_id in self.coordinates.keys()
         }
         
         print(f"\n=== CÁLCULO DE FACTORES DE ESCALA 2D (ALTURA = {self.person_height_cm} cm, TARGET = {target_distance_cm:.1f} cm)")
@@ -204,9 +210,8 @@ class GaitAnalysis3D:
         """Analiza medidas corporales 2D escaladas para cada cámara"""
         
         cameras_data = {
-            "camera0": self.coordinates_camera_0,
-            "camera1": self.coordinates_camera_1, 
-            "camera2": self.coordinates_camera_2
+            camera_id: self.coordinates[camera_id]
+            for camera_id in self.coordinates.keys()
         }
         
         def distance_2d_scaled(coords: np.ndarray, p1_idx: int, p2_idx: int, scale_factor: float) -> float:
