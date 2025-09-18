@@ -54,5 +54,31 @@ CAMERA_INTRINSICS = {
         "serial_number": "CPE745P0002B",
         "resolution": (640, 480), 
         "model": "Orbbec Gemini 335Le"
+    },
+
+    # Cámara 3 (S/N: CPE745P00018) - Ligeras variaciones por tolerancias de fabricación
+    "camera3": {
+        "camera_matrix": np.array([
+            [366.95544434, 0.0, 319.40429688],  # Valores generados directamente
+            [0.0, 366.93487549, 238.6277771],
+            [0.0, 0.0, 1.0]
+        ], dtype=np.float64),
+        "distortion_coeffs": np.array([-0.031112,  0.033254,  0.000365, -0.000915, -0.011411], dtype=np.float64),
+        "serial_number": "CPE745P00018",
+        "resolution": (640, 480), 
+        "model": "Orbbec Gemini 335Le"
+    },
+
+    # Cámara 4 (S/N: CPE345P0007P) - Ligeras variaciones por tolerancias de fabricación
+    "camera4": {
+        "camera_matrix": np.array([
+            [366.72042847, 0.0, 322.06997681],  # Valores generados directamente
+            [0.0, 366.63381958, 240.39222717],
+            [0.0, 0.0, 1.0]
+        ], dtype=np.float64),
+        "distortion_coeffs": np.array([-0.031542,  0.034544,  0.000525, -0.000181, -0.011977], dtype=np.float64),
+        "serial_number": "CPE345P0007P",
+        "resolution": (640, 480), 
+        "model": "Orbbec Gemini 335Le"
     }
 }
