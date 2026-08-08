@@ -1,42 +1,98 @@
-# Sistema de Análisis de Marcha para Detección de Gonartrosis
+# Multi-Camera Markerless Gait Analysis for Knee Osteoarthritis Research
 
-Este proyecto es el backend para el procesamiento de video y reconstrucción 3D de keypoints, desarrollado por la Universidad de Málaga y el Hospital Costa del Sol. El sistema está diseñado para analizar la marcha humana y detectar patrones relacionados con la gonartrosis, empleando procesamiento multi-cámara, modelos de pose 2D y triangulación 3D.
+This project is a research-oriented, end-to-end system for markerless, easily reproducible human gait analysis, developed in collaboration between the **University of Malaga** and **Costa del Sol Hospital**. It combines multi-camera computer vision, 2D human pose estimation, geometric 3D reconstruction, and biomechanical analysis to study gait patterns associated with knee osteoarthritis.
 
-Este proyecto (Server) está diseñado para funcionar conjuntamente con el repositorio Client, que gestiona la captura, grabación y envío de video multi-cámara. Server se encarga del procesamiento avanzado de los videos, detección de keypoints y reconstrucción 3D. Ambos forman el flujo completo de análisis de marcha, permitiendo una integración clínica e investigadora robusta. Para el funcionamiento completo, consulta y utiliza ambos repositorios.
+## Project Architecture
 
----
-## Descripción del proyecto
+The system is divided into two complementary repositories:
 
-El servidor recibe chunks de video desde varias cámaras, extrae los frames, detecta keypoints 2D usando varios modelos de MMPose, realiza un ensemble ponderado de los resultados y reconstruye los keypoints en 3D. El sistema está pensado para funcionar en entornos clínicos y de investigación, permitiendo la evaluación triplanar de la rodilla y la obtención de métricas precisas para el diagnóstico.
+- **markerless-gait-analysis-backend**: processes the multi-camera videos, detects 2D keypoints, combines the outputs of several pose-estimation models, reconstructs the human pose in 3D, and computes analysis measures.
+- **markerless-gait-analysis-frontend**: captures and records the synchronized camera streams and sends the video chunks to the server.
 
----
-## Modelos empleados
+Together, they provide the complete workflow for acquiring and analyzing gait data in a clinical or research setting. This repository documents the server component; both repositories are required for a complete deployment.
 
+## Technical Overview
 
-El sistema utiliza los siguientes modelos de MMPose:
- - VitPose (COCO, 17 keypoints)
- - HRNet (WholeBody, 133 keypoints: cuerpo, pies, manos, cara)
- - CSP (WholeBody, 133 keypoints: cuerpo, pies, manos, cara)
+The server receives video chunks from several cameras and executes the following pipeline:
 
-Para una descripción detallada de las clases y métodos principales del backend, consulta el archivo [`docs/main_classes.md`](docs/main_classes.md).
+1. Extract frames from the incoming video chunks.
+2. Detect 2D human-pose keypoints independently with several MMPose models.
+3. Fuse the detector outputs using a confidence-weighted ensemble.
+4. Estimate the spatial configuration of the cameras from multi-view keypoint correspondences.
+5. Triangulate the 2D keypoints to obtain an initial 3D reconstruction.
+6. Refine the camera parameters and 3D keypoints jointly through bundle adjustment.
+7. Compute reprojection errors, joint angles, anthropometric measures, and other analysis outputs.
 
-Cada modelo se integra como un detector independiente, con sus propias ponderaciones y lista de keypoints. Es posible añadir nuevos modelos de MMPose creando una clase que herede de [`backend/processing/detectors/base.py`](backend/processing/detectors/base.py), o integrar modelos externos sobreescribiendo los métodos necesarios.
+This organization separates perception, fusion, geometry, optimization, and analysis. It also makes it possible to inspect the contribution of each model and each reconstruction stage rather than relying only on a final aggregate result.
 
-<div style="background-color:#e3f2fd; border-left:6px solid #1976d2; padding:10px; margin-bottom:10px;">
-Los archivos de <strong>checkpoint</strong> necesarios para los modelos se encuentran en una <strong>release</strong> del proyecto. Deben guardarse en la ruta exacta [`Server/mmpose_models/checkpoints/`](mmpose_models/checkpoints/).
-</div>
+## Pose-Estimation Models
 
----
-## Estructura de archivos del proyecto
+The system currently supports the following MMPose-based detectors:
 
+- **ViTPose**: COCO, 17 keypoints.
+- **HRNet**: WholeBody, 133 keypoints covering the body, feet, hands, and face.
+- **CSPNeXt**: WholeBody, 133 keypoints covering the body, feet, hands, and face.
+- **MSPN**: supported by the detector architecture and configuration included in the project.
+
+Each detector is implemented independently, with its own model weights and keypoint definition. New MMPose detectors can be added by inheriting from `backend/processing/detectors/base.py`. External models can also be integrated by implementing or overriding the required initialization and chunk-processing methods.
+
+Model checkpoints are distributed through a project release and must be placed at:
+
+```text
+Server/mmpose_models/checkpoints/
 ```
+
+For a detailed description of the main backend classes and methods, see `docs/main_classes.md`.
+
+## Confidence-Weighted Ensembling
+
+The pose-processing coordinator abstracts the execution of multiple 2D pose detectors. It initializes the selected detectors when the first chunk arrives, distributes work across the available GPUs, and processes every chunk with all active models.
+
+For each keypoint, the ensemble combines the detector predictions using two sources of information:
+
+- the confidence reported by each detector;
+- a detector-specific weight assigned to the keypoint.
+
+The final coordinates and confidence values are computed as weighted combinations of the available predictions. Ensembling begins asynchronously once all cameras have completed processing the corresponding chunk, allowing the multi-camera workflow to continue while preserving synchronization between views.
+
+## 3D Reconstruction Pipeline
+
+The reconstruction module uses a geometry-based pipeline designed to make the estimation process explicit and evaluable.
+
+### Camera geometry
+
+The initial extrinsic parameters of the cameras are estimated from 2D keypoint correspondences across multiple views. This establishes the spatial relationship between the cameras and provides the geometric basis for reconstruction.
+
+### Initial triangulation
+
+Given the camera parameters and the fused 2D observations, the system reconstructs each anatomical keypoint in 3D using SVD-based triangulation.
+
+### Bundle adjustment
+
+The initial camera parameters and 3D points are jointly refined with nonlinear bundle adjustment. The optimization minimizes the global reprojection error, improving both the camera configuration and the spatial positions of the reconstructed keypoints.
+
+### Anatomical and biomechanical analysis
+
+The system applies anatomical scaling based on body measurements, including the nose-to-ankle distance, and provides analysis tools for:
+
+- knee-flexion angles;
+- body and anthropometric measurements;
+- per-camera 2D keypoint observations;
+- initial and optimized 3D reconstructions;
+- reprojection errors for each camera and reconstruction method.
+
+The 3D results are generated automatically after ensembling and stored in `data/processed/3D_keypoints/` using the `{frame_id}_{chunk_id}.npy` format.
+
+## Repository Structure
+
+```text
 Server/
 ├── app.py
 ├── main.py
 ├── config/
 │   ├── settings.py
-│   ├── __init__.py
-│   └── camera_intrinsics.py
+│   ├── camera_intrinsics.py
+│   └── __init__.py
 ├── backend/
 │   ├── processing/
 │   │   ├── ensemble/
@@ -46,8 +102,7 @@ Server/
 │   │   │   ├── vitpose.py
 │   │   │   ├── mspn.py
 │   │   │   ├── hrnet.py
-│   │   │   ├── csp.py
-│   │   │   └── __init__.py
+│   │   │   └── csp.py
 │   │   ├── reconstruction/
 │   │   │   ├── camera.py
 │   │   │   ├── calculate_extrinsics.py
@@ -56,226 +111,71 @@ Server/
 │   │   │   ├── perform_reconstruction.py
 │   │   │   ├── reprojection.py
 │   │   │   ├── analyze_3D_keypoint.py
-│   │   │   ├── complete_analysis.py
-│   │   │   └── __init__.py
-│   │   ├── coordinator.py
-│   │   └── __init__.py
-│   ├── tests/
-│   │   ├── csp.py
-│   │   ├── hrnet_w48_wholebody.py
-│   │   ├── mspn.py
-│   │   ├── vitpose.py
-│   │   ├── video.py
-│   │   ├── reconstruccion_2D.py
-│   │   └── __init__.py
-│   └── __init__.py
+│   │   │   └── complete_analysis.py
+│   │   └── coordinator.py
+│   └── tests/
 ├── mmpose_models/
 │   ├── configs/
-│   │   ├── pose2d/
-│   │   │   ├── td-hm_ViTPose-large_8xb64-210e_coco-256x192.py
-│   │   │   ├── td-hm_hrnet-w48_dark-8xb32-210e_coco-wholebody-384x288.py
-│   │   │   ├── td-hm_4xmspn50_8xb32-210e_coco-256x192.py
-│   │   │   └── cspnext-m_udp_8xb64-210e_coco-wholebody-256x192.py
-│   │   └── default_runtime.py
+│   │   └── pose2d/
 │   └── checkpoints/
 ├── data/
 │   ├── unprocessed/
-│   │   └── <paciente>/
-│   │       └── <sesion>/
-│   │           └── <camara>/
-│   │               └── chunks/
-│   │                   └── chunk_<id>.mp4
-│   │               └── keypoints2D/
-│   │                   └── <detector>/
-│   │                       └── <camara>/
-│   │                           ├── coordinates.npy
-│   │                           └── confidence.npy
 │   ├── processed/
-│   │   ├── 2D_keypoints/
-│   │   │   └── <paciente>/<sesion>/<camara>/
-│   │   │       ├── coordinates/
-│   │   │       │   └── {frame_id}_{chunk_id}.npy
-│   │   │       └── confidence/
-│   │   │           └── {frame_id}_{chunk_id}.npy
-│   │   ├── 3D_keypoints/
-│   │   │   └── <paciente>/<sesion>/{frame_id}_{chunk_id}.npy
-│   │   ├── annotated_videos/
-│   │   │   └── <paciente>/<sesion>/<camara>/<detector>/video_annotated.mp4
-│   │   └── photos_from_video/
-│   │       └── <paciente>/<sesion>/<camara>/frames/
-│   ├── logs/
-│   └── ...
+│   └── logs/
 ├── docs/
 │   └── main_classes.md
-├── .gitignore
 ├── LICENSE.md
-├── README.md
 └── requirements.txt
 ```
 
+The processing data is organized by patient, session, camera, detector, chunk, and frame. This preserves the provenance of the results and makes it possible to compare model predictions, ensemble outputs, and reconstruction stages.
 
----
-## Cómo ejecutar el servidor
+## API
 
+The server exposes the following endpoints:
 
-<div style="background-color:#e3f2fd; border-left:6px solid #1976d2; padding:10px; margin-bottom:10px;">
-Instala las dependencias antes de ejecutar el servidor.
-</div>
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/session/start` | Initialize a recording and processing session. |
+| `POST` | `/api/chunks/receive` | Receive and process a video chunk from the client. |
+| `POST` | `/api/session/end` | End the recording phase and determine the final chunk. |
+| `POST` | `/api/session/cancel` | Cancel a session and remove its processed data. |
+| `GET` | `/api/session/status` | Query the current session status. |
+| `GET` | `/health` | Check server health. |
+| `POST` | `/api/cameras/recalibrate` | Recalibrate the cameras' extrinsic parameters. |
 
-1. Instala las dependencias:
+Only one recording session can be active at a time, while processing can continue for multiple completed sessions.
+
+## Running the Server
+
+Install the Python dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
-2. Configura los parámetros en [`config/settings.py`](config/settings.py) según tu entorno (puerto, GPUs, rutas de modelos, etc.).
-3. Ejecuta el servidor:
+
+Configure the environment in `config/settings.py`, including the server port, model paths, GPU allocation, and processing options. Then start the server:
+
 ```bash
 python main.py
 ```
-<div style="background-color:#fffde7; border-left:6px solid #fbc02d; padding:10px; margin-bottom:10px;">
-El servidor se iniciará en el puerto configurado (por defecto 5000). Asegúrate de que el puerto esté abierto y accesible. Si usas el sistema con el repositorio Client, verifica que la configuración del servidor en <code>Client/backend/config/settings.py</code> coincida con la IP y puerto del servidor.
-</div>
 
+The default port is `5000`. When using the Client repository, its server address and port must match this configuration.
 
----
-## API Endpoints
+To generate visual demos of the per-camera 2D detections, set `save_annotated_videos = True` in `config/settings.py`. For this mode, the project recommends limiting `available_gpus` to a single GPU.
 
+## Development and Testing
 
-- `POST /api/session/start`: Inicializa una nueva sesión de grabación y procesamiento.
-- `POST /api/chunks/receive`: Recibe chunks de video desde el cliente para procesar.
-- `POST /api/session/end`: Finaliza la sesión de grabación, calcula el chunk máximo y permite continuar el procesamiento.
-- `POST /api/session/cancel`: Cancela la sesión y elimina todos los datos procesados.
-- `GET /api/session/status`: Consulta el estado actual de la sesión.
-- `GET /health`: Verifica el estado del servidor.
-- `POST /api/cameras/recalibrate`: Recalibra los parámetros extrínsecos de las cámaras.
+The `backend/tests/` directory contains focused prototypes and manual test scripts for detectors, video processing, 2D reconstruction, and 3D reconstruction. It is intended for developing and validating isolated components before integrating changes into the main pipeline rather than as a fully automated test suite.
 
+## Research and Clinical Context
 
----
-## Consideraciones importantes
+This system was developed from a real collaboration between a university and a hospital, where computer-vision methods had to be connected to practical clinical requirements. Its design reflects that setting: intermediate outputs are retained, reconstruction quality can be inspected through reprojection error, and the workflow supports communication between engineers, researchers, and medical professionals.
 
-- Se pueden generar demos visuales en [`data/processed/annotated_videos`](data/processed/annotated_videos) para ver la reconstrucción de keypoints 2D por modelo y cámara. Para ello, activa `save_annotated_videos = True` en [`config/settings.py`](config/settings.py) y limita `available_gpus` a una sola GPU.
+The system is intended for research and clinical evaluation support. Its outputs should be interpreted by qualified professionals and are not, by themselves, a medical diagnosis.
 
-- Solo puede haber una sesión de grabación activa, pero pueden procesarse varias sesiones simultáneamente.
+## License
 
-<div style="background-color:#ffebee; border-left:6px solid #d32f2f; padding:10px; margin-bottom:10px;">
-<strong>Advertencia:</strong> Si alguna cámara falla, es necesario reiniciar los dos servidores Flask y el switch de las cámaras.
-</div>
+This project is licensed under the Apache License 2.0. The included MMPose models and configurations are also distributed under Apache License 2.0. See `LICENSE.md` for the full terms and the recommended academic citation for MMPose.
 
-
----
-## Pipeline completo del proyecto
-
-- Al comenzar la grabación, se ejecuta `/api/session/start` para inicializar todo lo necesario.
-- Durante la grabación, el cliente envía chunks de video al servidor.
-- La sesión puede finalizarse o cancelarse:
-  - Si se cancela, se ejecuta `/api/session/cancel`, se eliminan los datos y se finaliza la sesión.
-  - Si se finaliza, se ejecuta `/api/session/end`, se determina el chunk máximo y se finaliza la sesión de grabación, aunque el procesamiento puede continuar.
-
-
----
-## Detectors
-
-- Todos los detectores heredan de [`backend/processing/detectors/base.py`](backend/processing/detectors/base.py), donde se define la inicialización, manejo de GPU, guardado de vídeos anotados y procesamiento de chunks comunes.
-- Las características específicas de cada detector (ponderaciones, keypoints, etc.) se definen en cada clase concreta.
-- Para añadir un detector de MMPose, basta con crear una clase que herede de `BasePoseDetector`.
-- Para integrar otros detectores, se pueden sobreescribir los métodos `initialize` y `process_chunk`, o crear una clase con los métodos necesarios adaptados al nuevo modelo.
-
-
----
-## Pose Processing Coordinator
-
-- El coordinador abstrae el uso de varios detectores de pose 2D y permite escalar el sistema con diferentes modelos.
-- Gestiona la alternancia y asignación de GPUs.
-- Al recibir el primer chunk, inicializa los detectores seleccionados.
-- Para cada chunk recibido, ejecuta `process_chunk` en todos los detectores activos.
-
-
----
-## Ensembling
-
-- Los detectores que participan en el ensemble se indican en `detector_instances`.
-- Cada detector define `ensemble_confidence_weights`, que asigna una ponderación a cada keypoint.
-- Los keypoints finales se calculan ponderando linealmente los resultados de cada modelo, considerando tanto la confianza del detector como la ponderación asignada.
-- La confianza final de cada keypoint se calcula también de forma ponderada.
-
-
-### Flujo de trabajo
-- Al iniciar la grabación, se registra la sesión con `register_session_start`.
-- Al finalizar, se calcula el máximo id de chunk con `get_max_chunk`.
-- Al procesar un chunk, se ejecuta `ensemble_processor.register_chunk_completion`, que inicia el ensembling de forma asíncrona cuando todas las cámaras han procesado el último chunk.
-- El ensembling se realiza con `process_session_ensemble`, que delega el procesamiento de cada chunk y cámara a `_process_chunk_ensemble`.
-- `_get_all_frame_files` obtiene los datos de los detectores en la estructura adecuada.
-- Para cada frame, `_combine_keypoints` realiza la combinación ponderada.
-- Los resultados se guardan con `_save_single_frame_result`.
-
-
----
-## Reconstrucción 3D
-
-El sistema implementa un pipeline completo de reconstrucción 3D de keypoints del que podemos destacar los siguientes apartados:
-
-### **Flujo de Procesamiento**
-
-1. **Estimación de parámetros extrínsecos**: Se comienza estimando los parámetros extrínsecos de cada cámara usando correspondencias de keypoints 2D entre múltiples vistas, estableciendo la geometría espacial del sistema multi-cámara.
-
-2. **Estimación de la reconstrucción 3D**: A partir de los extrínsecos iniciales, se realiza triangulación 3D de los keypoints 2D detectados, obteniendo las coordenadas espaciales de cada punto anatómico.
-
-3. **Optimización conjunta**: Se optimizan estas estimaciones conjuntamente mediante bundle adjustment, buscando reducir el error de reproyección y refinando tanto los parámetros de las cámaras como las posiciones 3D de los keypoints.
-
-### **Archivos del Sistema**
-
-#### **Flujo Principal (Integrados)**
-- [`camera.py`](backend/processing/reconstruction/camera.py): Gestiona diversas interacciones que se realizan con la cámara, incluyendo matrices de proyección y transformaciones.
-- [`calculate_extrinsics.py`](backend/processing/reconstruction/calculate_extrinsics.py): Realiza la primera estimación de los parámetros extrínsecos usando geometría epipolar y correspondencias entre vistas.
-- [`triangulation_svd.py`](backend/processing/reconstruction/triangulation_svd.py): Implementa triangulación mediante SVD para obtener la primera reconstrucción 3D a partir de los keypoints 2D.
-- [`bundle_adjustment.py`](backend/processing/reconstruction/bundle_adjustment.py): Emplea, a partir de una estimación inicial de extrínsecos y reconstrucción 3D, un método iterativo para reducir el error de reproyección mediante optimización no lineal.
-- [`perform_reconstruction.py`](backend/processing/reconstruction/perform_reconstruction.py): Orquesta todos los pasos del pipeline de reconstrucción 3D para que sea fácilmente integrable con el flujo principal del sistema.
-
-#### **Herramientas de Análisis (Independientes)**
-- [`reprojection.py`](backend/processing/reconstruction/reprojection.py): Calcula el error de reproyección para evaluar la calidad de la reconstrucción 3D y los parámetros de las cámaras.
-- [`analyze_3D_keypoint.py`](backend/processing/reconstruction/analyze_3D_keypoint.py): Muestra las coordenadas 3D de cada keypoint detectado y proporciona estimaciones detalladas de medidas corporales.
-- [`complete_analysis.py`](backend/processing/reconstruction/complete_analysis.py): Herramienta de análisis completo que muestra, para un paciente, sesión, chunk y frame especificados:
-  - Parámetros extrínsecos de la estimación inicial y después de la optimización
-  - Reconstrucciones 3D tanto de la triangulación inicial como de la versión optimizada
-  - Ángulos de flexión de ambas rodillas para análisis biomecánico
-  - Estimaciones de medidas corporales para cada método de reconstrucción
-  - Análisis de keypoints 2D para cada cámara individual
-  - Errores de reproyección para cada cámara y método
-
-### **Características Técnicas**
-
-- **Calibración robusta**: Primera estimación de extrínsecos usando múltiples frames para mayor precisión
-- **Triangulación SVD**: Método matemáticamente robusto para la reconstrucción 3D inicial
-- **Bundle Adjustment**: Optimización iterativa que minimiza el error de reproyección global
-- **Escalado anatómico**: Normalización basada en medidas antropométricas (altura nariz-tobillo)
-- **Análisis biomecánico**: Cálculo automático de ángulos articulares y medidas corporales
-
-<div style="background-color:#e8f5e8; border-left:6px solid #4caf50; padding:10px; margin-bottom:10px;">
-<strong>Integración:</strong> La reconstrucción 3D se ejecuta automáticamente después del ensemble, almacenando los resultados en <code>data/processed/3D_keypoints/</code> con formato <code>{frame_id}_{chunk_id}.npy</code>.
-</div>
-
-
----
-## Configuraciones
-
-- Toda la configuración está centralizada en la carpeta [`config/`](config/).
-- El archivo principal es [`config/settings.py`](config/settings.py), donde se definen rutas, GPUs, parámetros de procesamiento, etc.
-
-
----
-## Testing
-
-<div style="background-color:#fffde7; border-left:6px solid #fbc02d; padding:10px; margin-bottom:10px;">
-<strong>Consejo:</strong> Utiliza la carpeta <code>backend/tests/</code> para prototipos y pruebas manuales antes de integrar cambios en el sistema principal.
-</div>
-
-La carpeta [`backend/tests/`](backend/tests/) no está pensada para pruebas automáticas, sino como espacio para desarrollar código aislado que posteriormente se integra en el proyecto principal.
-
-
----
-## Licencia
-
-Este proyecto está licenciado bajo Apache License 2.0. Los modelos y configuraciones de MMPose también están bajo Apache 2.0. Consulta el archivo [`LICENSE.md`](LICENSE.md) para más detalles, incluyendo la cita académica recomendada para MMPose.
-
-
----
-Desarrollado por la Universidad de Málaga y el Hospital Costa del Sol.
+Developed by the **University of Malaga** and **Costa del Sol Hospital**.
