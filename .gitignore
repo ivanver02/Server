@@ -181,3 +181,6 @@ data/processed/.gitkeep
 mmpose_models/configs/.gitkeep
 mmpose_models/checkpoints/.gitkeep
 !.gitkeep
+
+
+!images/*.png
